@@ -1,0 +1,834 @@
+<title>Highway Run</title>
+<meta name="description" content="5-level highway dodger — tap or arrow keys to switch lanes, survive to the target score.">
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  html,body{width:100%;height:100%;background:#0D0A07;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none}
+  canvas{display:block;position:fixed;inset:0;cursor:default}
+</style>
+<canvas id="g"></canvas>
+<script>
+const cv = document.getElementById('g');
+const cx = cv.getContext('2d');
+
+// ── Level definitions ─────────────────────────────────────────────
+const LEVELS = [
+  { name:'CLEAR ROAD', diff:'EASY',      target:600,   ss:3.0, ms:5.5,  sb:100, sm:70,  ac:'#C8A030', dc:'#F0D060' },
+  { name:'COMMUTE',    diff:'NORMAL',    target:1800,  ss:4.0, ms:7.5,  sb:80,  sm:50,  ac:'#40C870', dc:'#70F090' },
+  { name:'HIGHWAY',    diff:'HARD',      target:4000,  ss:5.0, ms:9.5,  sb:60,  sm:34,  ac:'#4888E8', dc:'#80B8FF' },
+  { name:'RUSH HOUR',  diff:'VERY HARD', target:8000,  ss:6.0, ms:11.5, sb:44,  sm:22,  ac:'#E86830', dc:'#FFAA60' },
+  { name:'NIGHT RACE', diff:'EXTREME',   target:14000, ss:7.0, ms:14.0, sb:28,  sm:14,  ac:'#B040E0', dc:'#E080FF' },
+];
+// ss=start speed, ms=max speed, sb=spawn base (frames), sm=spawn min, ac=accent, dc=display color
+
+// ── Progress ──────────────────────────────────────────────────────
+let prog = loadProg();
+function loadProg(){
+  try{ return JSON.parse(localStorage.getItem('hr4'))||defProg(); }catch{ return defProg(); }
+}
+function defProg(){ return {unlocked:0, bests:[0,0,0,0,0], stars:[0,0,0,0,0]}; }
+function saveProg(){ localStorage.setItem('hr4', JSON.stringify(prog)); }
+
+// ── Sizing ────────────────────────────────────────────────────────
+let W, H, DPR, roadL, roadR, roadW, laneW;
+const LANES=3, CW=38, CH=68, EW=36, EH=64;
+
+function resize(){
+  DPR = Math.min(window.devicePixelRatio||1,2);
+  W=window.innerWidth; H=window.innerHeight;
+  cv.width=Math.round(W*DPR); cv.height=Math.round(H*DPR);
+  cv.style.width=W+'px'; cv.style.height=H+'px';
+  cx.setTransform(DPR,0,0,DPR,0,0);
+  roadW=Math.min(W*0.86,390); roadL=(W-roadW)/2; roadR=roadL+roadW;
+  laneW=roadW/LANES;
+}
+window.addEventListener('resize', resize);
+resize();
+
+// ── State ─────────────────────────────────────────────────────────
+// 'title' | 'levels' | 'playing' | 'clear' | 'dead'
+let ST='title';
+let curLevel=0, score=0, speed=3.8, frame=0, roadY=0;
+
+// ── Player ────────────────────────────────────────────────────────
+let pLane=1, pX, pTX, pY, pInv=0;
+const lx = l => roadL + laneW*(l+0.5);
+
+// ── Enemy colors ──────────────────────────────────────────────────
+const ECOLS=[
+  {b:'#B07818',r:'#7A5010',w:'#8EC8C0'},
+  {b:'#283C20',r:'#182814',w:'#7AB090'},
+  {b:'#3C2A1A',r:'#281808',w:'#8090A0'},
+  {b:'#404038',r:'#2A2822',w:'#A0A890'},
+  {b:'#14183A',r:'#0C1028',w:'#7890C0'},
+  {b:'#501A18',r:'#381008',w:'#A08088'},
+];
+
+// ── Entities ──────────────────────────────────────────────────────
+let enemies=[], coins=[], parts=[], pops=[];
+let shake=0, spawnT=0, coinT=0, combo=0, comboT=0;
+let cardRects=[];       // level-select hit areas
+let clearAnimT=0;       // timer for clear screen animation
+
+// ── Helpers ───────────────────────────────────────────────────────
+function rrect(x,y,w,h,r){
+  r=Math.min(r,w/2,h/2);
+  cx.beginPath();
+  cx.moveTo(x+r,y); cx.lineTo(x+w-r,y);
+  cx.arcTo(x+w,y,x+w,y+r,r); cx.lineTo(x+w,y+h-r);
+  cx.arcTo(x+w,y+h,x+w-r,y+h,r); cx.lineTo(x+r,y+h);
+  cx.arcTo(x,y+h,x,y+h-r,r); cx.lineTo(x,y+r);
+  cx.arcTo(x,y,x+r,y,r); cx.closePath();
+}
+
+// ── Draw car ──────────────────────────────────────────────────────
+function drawCar(x,y,w,h,col,isP){
+  const {b,r,w:wc}=col;
+  const hw=w*0.5, hh=h*0.5;
+  cx.save();
+
+  // body
+  cx.fillStyle=b;
+  cx.beginPath();
+  cx.moveTo(x-hw*0.62,y-hh); cx.lineTo(x+hw*0.62,y-hh);
+  cx.quadraticCurveTo(x+hw,y-hh, x+hw,y-hh+h*0.13);
+  cx.lineTo(x+hw,y+hh-h*0.15);
+  cx.quadraticCurveTo(x+hw,y+hh, x+hw*0.68,y+hh);
+  cx.lineTo(x-hw*0.68,y+hh);
+  cx.quadraticCurveTo(x-hw,y+hh, x-hw,y+hh-h*0.15);
+  cx.lineTo(x-hw,y-hh+h*0.13);
+  cx.quadraticCurveTo(x-hw,y-hh, x-hw*0.62,y-hh);
+  cx.closePath(); cx.fill();
+
+  // hood
+  cx.fillStyle=r; cx.globalAlpha=0.28;
+  cx.beginPath();
+  cx.moveTo(x-hw*0.60,y-hh); cx.lineTo(x+hw*0.60,y-hh);
+  cx.lineTo(x+hw*0.92,y-hh+h*0.27); cx.lineTo(x-hw*0.92,y-hh+h*0.27);
+  cx.closePath(); cx.fill(); cx.globalAlpha=1;
+
+  // windshield
+  cx.fillStyle=wc; cx.globalAlpha=0.92;
+  cx.beginPath();
+  cx.moveTo(x-hw*0.80,y-hh+h*0.05); cx.lineTo(x+hw*0.80,y-hh+h*0.05);
+  cx.lineTo(x+hw*0.64,y-hh+h*0.24); cx.lineTo(x-hw*0.64,y-hh+h*0.24);
+  cx.closePath(); cx.fill(); cx.globalAlpha=1;
+
+  // cabin
+  cx.fillStyle=r; cx.globalAlpha=0.50;
+  cx.beginPath();
+  cx.moveTo(x-hw*0.64,y-hh+h*0.24); cx.lineTo(x+hw*0.64,y-hh+h*0.24);
+  cx.lineTo(x+hw*0.64,y+hh-h*0.29); cx.lineTo(x-hw*0.64,y+hh-h*0.29);
+  cx.closePath(); cx.fill(); cx.globalAlpha=1;
+
+  // rear window
+  cx.fillStyle=wc; cx.globalAlpha=0.68;
+  cx.beginPath();
+  cx.moveTo(x-hw*0.64,y+hh-h*0.29); cx.lineTo(x+hw*0.64,y+hh-h*0.29);
+  cx.lineTo(x+hw*0.56,y+hh-h*0.10); cx.lineTo(x-hw*0.56,y+hh-h*0.10);
+  cx.closePath(); cx.fill(); cx.globalAlpha=1;
+
+  // wheels
+  const ww=5.5,wh=13;
+  const wFy=y-hh+h*0.18, wRy=y+hh-h*0.22;
+  cx.fillStyle='#070505';
+  rrect(x-hw-ww+0.5,wFy-wh/2,ww,wh,2); cx.fill();
+  rrect(x+hw-0.5,   wFy-wh/2,ww,wh,2); cx.fill();
+  rrect(x-hw-ww+0.5,wRy-wh/2,ww,wh,2); cx.fill();
+  rrect(x+hw-0.5,   wRy-wh/2,ww,wh,2); cx.fill();
+  cx.fillStyle='#4A3C2E';
+  cx.fillRect(x-hw-ww+1.5,wFy-wh/2+2,ww-2,wh-4);
+  cx.fillRect(x+hw+0.5,   wFy-wh/2+2,ww-2,wh-4);
+  cx.fillRect(x-hw-ww+1.5,wRy-wh/2+2,ww-2,wh-4);
+  cx.fillRect(x+hw+0.5,   wRy-wh/2+2,ww-2,wh-4);
+
+  // headlights
+  if(isP){cx.shadowColor='#FFFCE0';cx.shadowBlur=12;}
+  cx.fillStyle=isP?'#FFF8D0':'#FFE090';
+  cx.beginPath();
+  cx.moveTo(x-hw*0.62,y-hh); cx.lineTo(x-hw*0.20,y-hh);
+  cx.lineTo(x-hw*0.24,y-hh+6); cx.lineTo(x-hw*0.64,y-hh+6);
+  cx.closePath(); cx.fill();
+  cx.beginPath();
+  cx.moveTo(x+hw*0.20,y-hh); cx.lineTo(x+hw*0.62,y-hh);
+  cx.lineTo(x+hw*0.64,y-hh+6); cx.lineTo(x+hw*0.24,y-hh+6);
+  cx.closePath(); cx.fill();
+  cx.shadowBlur=0;
+
+  // taillights
+  if(isP){cx.shadowColor='#FF1A1A';cx.shadowBlur=8;}
+  cx.fillStyle=isP?'#FF1818':'#A82C18';
+  cx.beginPath();
+  cx.moveTo(x-hw*0.66,y+hh-6); cx.lineTo(x-hw*0.22,y+hh-6);
+  cx.lineTo(x-hw*0.20,y+hh);   cx.lineTo(x-hw*0.65,y+hh);
+  cx.closePath(); cx.fill();
+  cx.beginPath();
+  cx.moveTo(x+hw*0.22,y+hh-6); cx.lineTo(x+hw*0.66,y+hh-6);
+  cx.lineTo(x+hw*0.65,y+hh);   cx.lineTo(x+hw*0.20,y+hh);
+  cx.closePath(); cx.fill();
+  cx.shadowBlur=0;
+
+  if(isP){
+    cx.fillStyle='rgba(255,200,180,0.13)';
+    cx.beginPath();
+    cx.moveTo(x-hw*0.18,y-hh+h*0.05); cx.lineTo(x-hw*0.04,y-hh+h*0.05);
+    cx.lineTo(x-hw*0.04,y+hh-h*0.13); cx.lineTo(x-hw*0.18,y+hh-h*0.13);
+    cx.closePath(); cx.fill();
+  }
+  cx.restore();
+}
+
+// ── Headlight beam ────────────────────────────────────────────────
+function drawBeam(x,y){
+  const g=cx.createRadialGradient(x,y-CH/2,0,x,y-CH/2,180);
+  g.addColorStop(0,'rgba(255,245,200,0.20)');
+  g.addColorStop(1,'rgba(255,245,200,0.00)');
+  cx.fillStyle=g;
+  cx.beginPath();
+  cx.moveTo(x-CW*0.42,y-CH/2); cx.lineTo(x-CW*1.5,y-CH/2-200);
+  cx.lineTo(x+CW*1.5,y-CH/2-200); cx.lineTo(x+CW*0.42,y-CH/2);
+  cx.closePath(); cx.fill();
+}
+
+// ── Road ──────────────────────────────────────────────────────────
+function drawRoad(){
+  cx.fillStyle='#0D0A07'; cx.fillRect(0,0,W,H);
+  const rg=cx.createLinearGradient(roadL,0,roadR,0);
+  rg.addColorStop(0,'#1A1610'); rg.addColorStop(0.15,'#221E16');
+  rg.addColorStop(0.5,'#252018'); rg.addColorStop(0.85,'#221E16');
+  rg.addColorStop(1,'#1A1610');
+  cx.fillStyle=rg; cx.fillRect(roadL,0,roadW,H);
+  const lg=cx.createRadialGradient(W/2,H*0.35,0,W/2,H*0.35,H*0.7);
+  lg.addColorStop(0,'rgba(255,195,90,0.07)');
+  lg.addColorStop(1,'rgba(255,195,90,0.00)');
+  cx.fillStyle=lg; cx.fillRect(roadL,0,roadW,H);
+  cx.strokeStyle='#C8A030'; cx.lineWidth=3; cx.globalAlpha=0.65;
+  cx.beginPath(); cx.moveTo(roadL+5,0); cx.lineTo(roadL+5,H); cx.stroke();
+  cx.beginPath(); cx.moveTo(roadR-5,0); cx.lineTo(roadR-5,H); cx.stroke();
+  cx.globalAlpha=1;
+  cx.strokeStyle='#7A6018'; cx.lineWidth=2;
+  cx.setLineDash([58,52]); cx.lineDashOffset=-roadY;
+  for(let l=1;l<LANES;l++){
+    const lxp=roadL+laneW*l;
+    cx.beginPath(); cx.moveTo(lxp,0); cx.lineTo(lxp,H); cx.stroke();
+  }
+  cx.setLineDash([]);
+  const eg=cx.createLinearGradient(0,0,roadL,0);
+  eg.addColorStop(0,'#0B0908'); eg.addColorStop(1,'#181410');
+  cx.fillStyle=eg; cx.fillRect(0,0,roadL,H);
+  const eg2=cx.createLinearGradient(roadR,0,W,0);
+  eg2.addColorStop(0,'#181410'); eg2.addColorStop(1,'#0B0908');
+  cx.fillStyle=eg2; cx.fillRect(roadR,0,W-roadR,H);
+  const vg=cx.createRadialGradient(W/2,H/2,H*0.22,W/2,H/2,H*0.92);
+  vg.addColorStop(0,'rgba(0,0,0,0)'); vg.addColorStop(1,'rgba(0,0,0,0.60)');
+  cx.fillStyle=vg; cx.fillRect(0,0,W,H);
+}
+
+// ── Coin ──────────────────────────────────────────────────────────
+function drawCoin(c){
+  cx.save(); cx.translate(c.x,c.y);
+  cx.shadowColor='#FFE870'; cx.shadowBlur=14;
+  const sq=Math.max(0.08,Math.abs(Math.cos(c.rot)));
+  cx.scale(sq,1);
+  cx.beginPath(); cx.arc(0,0,c.r,0,Math.PI*2);
+  cx.fillStyle='#F0C020'; cx.fill();
+  cx.shadowBlur=0;
+  if(sq>0.45){
+    cx.fillStyle='#FFE870'; cx.font=`bold ${c.r}px monospace`;
+    cx.textAlign='center'; cx.textBaseline='middle';
+    cx.fillText('$',0,1);
+  }
+  cx.restore();
+}
+
+// ── Particles ─────────────────────────────────────────────────────
+function boom(x,y){
+  const cols=['#FF8020','#FF4010','#FFCC00','#FF2000','#CC4000','#FF6030'];
+  for(let i=0;i<34;i++){
+    const a=Math.random()*Math.PI*2, s=1.5+Math.random()*7.5;
+    parts.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,r:2.5+Math.random()*7,
+      col:cols[Math.random()*cols.length|0],life:1,dec:0.018+Math.random()*0.024});
+  }
+}
+function exhaust(x,y){
+  parts.push({x:x+(Math.random()-.5)*10,y,vx:(Math.random()-.5)*0.5,
+    vy:speed*0.18+Math.random()*0.5,r:3+Math.random()*3.5,
+    col:'#4A3820',life:0.55,dec:0.055,smoke:true});
+}
+function sparkle(x,y,ac){
+  for(let i=0;i<10;i++){
+    const a=Math.random()*Math.PI*2, s=1+Math.random()*4;
+    parts.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,r:2+Math.random()*4,
+      col:ac||'#F0C020',life:1,dec:0.038+Math.random()*0.03});
+  }
+}
+
+function pop(txt,x,y,col){ pops.push({txt,x,y,col:col||'#F0D060',life:1}); }
+
+// ── Lane move ─────────────────────────────────────────────────────
+function moveLane(d){
+  const nl=Math.max(0,Math.min(LANES-1,pLane+d));
+  if(nl!==pLane){pLane=nl; pTX=lx(pLane);}
+}
+
+// ── Tilt / gyroscope steering ─────────────────────────────────────
+// gamma = left/right tilt in degrees (-90..+90)
+let tiltEnabled = false;
+let tiltGamma   = 0;   // smoothed gamma
+let tiltBaseline= null;// calibrated center
+const TILT_DEAD = 6;   // degrees deadzone
+const TILT_THRESH=16;  // degrees to trigger a lane change
+let tiltLaneLeft =false, tiltLaneRight=false; // edge-trigger flags
+
+function handleOrientation(e){
+  if(e.gamma===null) return;
+  tiltEnabled=true;
+  // smooth
+  tiltGamma=tiltGamma*0.7+e.gamma*0.3;
+  if(tiltBaseline===null) tiltBaseline=tiltGamma;
+  const rel=tiltGamma-tiltBaseline;
+  if(ST!=='playing') return;
+  if(rel < -TILT_THRESH){
+    if(!tiltLaneLeft){ tiltLaneLeft=true; moveLane(-1); }
+    tiltLaneRight=false;
+  } else if(rel > TILT_THRESH){
+    if(!tiltLaneRight){ tiltLaneRight=true; moveLane(1); }
+    tiltLaneLeft=false;
+  } else if(Math.abs(rel)<TILT_DEAD){
+    tiltLaneLeft=false; tiltLaneRight=false;
+  }
+}
+
+// iOS 13+ needs permission
+function requestTilt(){
+  if(typeof DeviceOrientationEvent!=='undefined'&&
+     typeof DeviceOrientationEvent.requestPermission==='function'){
+    DeviceOrientationEvent.requestPermission().then(r=>{
+      if(r==='granted') window.addEventListener('deviceorientation',handleOrientation);
+    }).catch(()=>{});
+  } else {
+    window.addEventListener('deviceorientation',handleOrientation);
+  }
+}
+// Try attaching immediately (Android / older iOS)
+window.addEventListener('deviceorientation',handleOrientation);
+
+// ── Controls ──────────────────────────────────────────────────────
+const keys={};
+document.addEventListener('keydown',e=>{
+  if(keys[e.key]) return; keys[e.key]=true;
+  if(ST==='playing'){
+    if(e.key==='ArrowLeft'||e.key==='a'||e.key==='A') moveLane(-1);
+    if(e.key==='ArrowRight'||e.key==='d'||e.key==='D') moveLane(1);
+    if(e.key==='Escape'){ ST='levels'; }
+  } else if(ST==='title'){
+    if(e.key===' '||e.key==='Enter') ST='levels';
+  } else if(ST==='clear'||ST==='dead'){
+    if(e.key===' '||e.key==='Enter') handleClearDeadAction();
+  }
+});
+document.addEventListener('keyup',e=>{ keys[e.key]=false; });
+
+cv.addEventListener('touchstart',e=>{
+  e.preventDefault();
+  const tx=e.touches[0].clientX, ty=e.touches[0].clientY;
+  if(ST==='playing'){
+    if(tx<W*0.5) moveLane(-1); else moveLane(1);
+  } else if(ST==='title'){
+    ST='levels';
+  } else if(ST==='levels'){
+    handleLevelTap(tx,ty);
+  } else if(ST==='clear'||ST==='dead'){
+    handleClearDeadAction();
+  }
+},{passive:false});
+
+cv.addEventListener('click',e=>{
+  const tx=e.clientX, ty=e.clientY;
+  if(ST==='title') ST='levels';
+  else if(ST==='levels') handleLevelTap(tx,ty);
+  else if(ST==='clear'||ST==='dead') handleClearDeadAction();
+});
+
+function handleLevelTap(tx,ty){
+  for(const r of cardRects){
+    if(tx>=r.x&&tx<=r.x+r.w&&ty>=r.y&&ty<=r.y+r.h){
+      if(r.li<=prog.unlocked) go(r.li);
+      return;
+    }
+  }
+  // back button
+  if(backRect&&tx>=backRect.x&&tx<=backRect.x+backRect.w&&ty>=backRect.y&&ty<=backRect.y+backRect.h){
+    ST='title';
+  }
+}
+
+function handleClearDeadAction(){
+  if(ST==='clear'){
+    const next=curLevel+1;
+    if(next<LEVELS.length) go(next); else ST='levels';
+  } else {
+    go(curLevel);
+  }
+}
+
+// ── Spawn helpers ─────────────────────────────────────────────────
+function spawnEnemy(yOffset=0){
+  const lane=Math.floor(Math.random()*LANES);
+  const col=ECOLS[Math.random()*ECOLS.length|0];
+  const big=Math.random()<0.18;
+  enemies.push({lane,x:lx(lane),y:-90+yOffset,
+    w:big?EW+8:EW,h:big?EH+20:EH,col,spd:0.7+Math.random()*1.3});
+}
+
+// ── Start level ───────────────────────────────────────────────────
+function go(li){
+  curLevel=li; const lv=LEVELS[li];
+  ST='playing'; score=0; speed=lv.ss; frame=0; roadY=0;
+  pLane=1; pY=H-140; pX=lx(1); pTX=pX; pInv=100;
+  enemies=[]; coins=[]; parts=[]; pops=[];
+  shake=0; spawnT=0; coinT=0; combo=0; comboT=0;
+  // Recalibrate tilt center so wherever they hold the phone is "straight"
+  tiltBaseline=tiltGamma; tiltLaneLeft=false; tiltLaneRight=false;
+  // Request iOS permission on first game start (needs user gesture)
+  requestTilt();
+  // Pre-populate road
+  const slots=[0,1,2]; slots.sort(()=>Math.random()-0.5);
+  for(let i=0;i<3;i++){
+    const col=ECOLS[Math.random()*ECOLS.length|0];
+    const big=Math.random()<0.18;
+    enemies.push({lane:slots[i],x:lx(slots[i]),y:H*(0.08+i*0.22),
+      w:big?EW+8:EW,h:big?EH+20:EH,col,spd:0.7+Math.random()*1.3});
+  }
+}
+
+function die(){
+  if(pInv>0) return;
+  ST='dead';
+  if(score>prog.bests[curLevel]){
+    prog.bests[curLevel]=score; saveProg();
+  }
+  boom(pX,pY); shake=28;
+}
+
+function clearLevel(){
+  ST='clear'; clearAnimT=0;
+  const lv=LEVELS[curLevel];
+  const s=score>=lv.target*2?3:score>=lv.target*1.5?2:1;
+  if(s>prog.stars[curLevel]) prog.stars[curLevel]=s;
+  if(score>prog.bests[curLevel]) prog.bests[curLevel]=score;
+  if(curLevel>=prog.unlocked&&curLevel+1<LEVELS.length){
+    prog.unlocked=curLevel+1;
+  }
+  saveProg();
+}
+
+// ── Update ────────────────────────────────────────────────────────
+let backRect=null;
+
+function update(){
+  roadY=(roadY+(ST==='playing'?speed:2))%110;
+  if(ST!=='playing') return;
+
+  const lv=LEVELS[curLevel];
+  frame++;
+  speed=Math.min(lv.ms, lv.ss+frame*0.0022);
+  score+=Math.ceil(speed*0.09);
+
+  // Level clear check
+  if(score>=lv.target){ clearLevel(); return; }
+
+  pX+=(pTX-pX)*0.22;
+  if(pInv>0) pInv--;
+  if(comboT>0) comboT--; else combo=0;
+
+  // Spawn enemies
+  const si=Math.max(lv.sm, lv.sb - speed*4|0);
+  spawnT++;
+  if(spawnT>=si){
+    spawnT=0;
+    spawnEnemy();
+    if(speed>lv.ms*0.65&&Math.random()<0.4) spawnEnemy(-60);
+    if(curLevel>=3&&speed>lv.ms*0.8&&Math.random()<0.3) spawnEnemy(-120);
+  }
+
+  // Spawn coins
+  coinT++;
+  if(coinT>=100){ coinT=0; if(Math.random()<0.65) coins.push({x:lx(Math.random()*LANES|0),y:-24,r:11,rot:0}); }
+
+  // Exhaust
+  if(frame%4===0){ exhaust(pX-9,pY+CH*0.5); exhaust(pX+9,pY+CH*0.5); }
+
+  // Move enemies
+  for(let i=enemies.length-1;i>=0;i--){
+    const e=enemies[i];
+    e.y+=speed+e.spd; e.x+=(lx(e.lane)-e.x)*0.12;
+    if(e.y>H+100){enemies.splice(i,1); continue;}
+    if(pInv===0){
+      const dx=Math.abs(e.x-pX),dy=Math.abs(e.y-pY);
+      if(dx<(CW+e.w)*0.37&&dy<(CH+e.h)*0.37){die(); return;}
+    }
+  }
+
+  // Move coins
+  for(let i=coins.length-1;i>=0;i--){
+    const c=coins[i];
+    c.y+=speed; c.rot+=0.07;
+    if(c.y>H+30){coins.splice(i,1); continue;}
+    if(Math.abs(c.x-pX)<CW*0.72&&Math.abs(c.y-pY)<CH*0.72){
+      combo++; comboT=95;
+      const pts=50*Math.max(1,combo>>1);
+      score+=pts;
+      sparkle(c.x,c.y,LEVELS[curLevel].ac);
+      pop(`+${pts}`,c.x,c.y-22,LEVELS[curLevel].ac);
+      coins.splice(i,1);
+    }
+  }
+
+  // Particles
+  for(let i=parts.length-1;i>=0;i--){
+    const p=parts[i];
+    p.x+=p.vx; p.y+=p.vy; p.life-=p.dec;
+    if(p.smoke){p.r+=0.09; p.vy-=0.04;}
+    if(p.life<=0) parts.splice(i,1);
+  }
+  for(let i=pops.length-1;i>=0;i--){
+    pops[i].y-=1.6; pops[i].life-=0.022;
+    if(pops[i].life<=0) pops.splice(i,1);
+  }
+  if(shake>0) shake--;
+}
+
+// ── HUD (in-game) ─────────────────────────────────────────────────
+function drawHUD(){
+  const lv=LEVELS[curLevel];
+  const ac=lv.ac, dc=lv.dc;
+  const frac=Math.min(1,score/lv.target);
+
+  // Progress bar strip at top
+  cx.fillStyle='rgba(0,0,0,0.5)';
+  cx.fillRect(roadL,0,roadW,28);
+  cx.fillStyle=ac;
+  cx.fillRect(roadL,0,roadW*frac,4);
+  cx.fillStyle='rgba(0,0,0,0.3)';
+  cx.fillRect(roadL+roadW*frac,0,roadW*(1-frac),4);
+
+  // Score
+  cx.fillStyle='rgba(0,0,0,0.45)';
+  rrect(W/2-90,8,180,38,8); cx.fill();
+  cx.fillStyle=dc; cx.font='bold 22px monospace';
+  cx.textAlign='center'; cx.textBaseline='middle';
+  cx.fillText(`${score}  /  ${lv.target}`,W/2,28);
+
+  // Level name & number (top-left)
+  cx.fillStyle='rgba(0,0,0,0.35)';
+  rrect(roadL+8,50,120,34,6); cx.fill();
+  cx.fillStyle=ac; cx.font='bold 10px monospace';
+  cx.textAlign='left'; cx.textBaseline='top';
+  cx.fillText(`LVL ${curLevel+1}  ${lv.diff}`,roadL+14,56);
+  cx.fillStyle=dc; cx.font='bold 13px monospace';
+  cx.fillText(lv.name,roadL+14,68);
+
+  // Speed bar
+  const spFrac=(speed-lv.ss)/(lv.ms-lv.ss);
+  const barH=Math.max(0,Math.round(spFrac*90));
+  cx.fillStyle='rgba(0,0,0,0.35)';
+  rrect(roadR+8,H-110,8,90,3); cx.fill();
+  if(barH>0){
+    cx.fillStyle=ac;
+    rrect(roadR+8,H-20-barH,8,barH,3); cx.fill();
+  }
+  cx.fillStyle='#504828'; cx.font='9px monospace'; cx.textAlign='center';
+  cx.fillText('SPD',roadR+12,H-118);
+
+  // Combo
+  if(combo>=2){
+    cx.fillStyle=ac; cx.font=`bold ${12+Math.min(combo,10)}px monospace`;
+    cx.textAlign='center'; cx.textBaseline='alphabetic';
+    cx.fillText(`×${combo} COMBO`,W/2,H-46);
+  }
+
+  // Tilt indicator (left side, below speed bar)
+  if(tiltEnabled){
+    const rel=Math.max(-30,Math.min(30,tiltGamma-(tiltBaseline||0)));
+    const barW=8, barTotalH=60;
+    const bx=roadL-barW-8, by=H-80;
+    cx.fillStyle='rgba(0,0,0,0.35)';
+    rrect(bx,by,barW,barTotalH,3); cx.fill();
+    // center line
+    cx.fillStyle='#302A18';
+    cx.fillRect(bx,by+barTotalH/2-1,barW,2);
+    // dot showing tilt
+    const dotY=by+barTotalH/2+(rel/30)*(barTotalH*0.42);
+    cx.shadowColor=lv.ac; cx.shadowBlur=6;
+    cx.fillStyle=lv.ac;
+    rrect(bx+1,dotY-4,barW-2,8,3); cx.fill();
+    cx.shadowBlur=0;
+    cx.fillStyle='#403820'; cx.font='8px monospace'; cx.textAlign='center';
+    cx.textBaseline='alphabetic';
+    cx.fillText('TILT',bx+barW/2,by-4);
+  }
+
+  // Tap hints (first 3s) — only if no tilt
+  if(frame<180&&!tiltEnabled){
+    const a=Math.max(0,(180-frame)/90);
+    cx.globalAlpha=a*0.55;
+    cx.fillStyle='rgba(0,0,0,0.5)';
+    cx.fillRect(0,0,roadL-2,H); cx.fillRect(roadR+2,0,W-roadR-2,H);
+    cx.fillStyle='rgba(255,210,100,0.85)';
+    cx.font='bold 13px monospace'; cx.textAlign='center'; cx.textBaseline='middle';
+    cx.fillText('◀ TAP',roadL/2,H*0.52);
+    cx.fillText('TAP ▶',roadR+(W-roadR)/2,H*0.52);
+    cx.globalAlpha=1;
+  }
+}
+
+// ── Title screen ──────────────────────────────────────────────────
+function drawTitle(){
+  cx.fillStyle='rgba(10,8,5,0.76)'; cx.fillRect(0,0,W,H);
+  cx.textAlign='center';
+  cx.fillStyle='#806830'; cx.font='bold 11px monospace';
+  cx.textBaseline='alphabetic';
+  cx.fillText('ENDLESS HIGHWAY',W/2,H*0.28);
+  cx.shadowColor='#F0D060'; cx.shadowBlur=26;
+  cx.fillStyle='#F0D060';
+  const fs=Math.min(66,W*0.14)|0;
+  cx.font=`bold ${fs}px monospace`;
+  cx.fillText('HIGHWAY',W/2,H*0.41);
+  cx.fillText('RUN',W/2,H*0.41+fs*1.12);
+  cx.shadowBlur=0;
+  cx.strokeStyle='#4A3C18'; cx.lineWidth=1;
+  const dw=Math.min(220,W*0.55);
+  cx.beginPath(); cx.moveTo(W/2-dw/2,H*0.56); cx.lineTo(W/2+dw/2,H*0.56); cx.stroke();
+  cx.fillStyle='#686040'; cx.font='11px monospace'; cx.textBaseline='middle';
+  cx.fillText('5 LEVELS  ·  KEYBOARD ← →  ·  MOBILE TAP',W/2,H*0.61);
+  if(Math.sin(Date.now()*0.0028)>0){
+    cx.fillStyle='#F0D060'; cx.font='bold 15px monospace';
+    cx.fillText('TAP  TO  START',W/2,H*0.70);
+  }
+  if(prog.unlocked>0){
+    cx.fillStyle='#4A3A18'; cx.font='11px monospace';
+    cx.fillText(`${prog.unlocked} LEVEL${prog.unlocked>1?'S':''} UNLOCKED`,W/2,H*0.78);
+  }
+}
+
+// ── Level select ──────────────────────────────────────────────────
+function drawLevelSelect(){
+  cx.fillStyle='rgba(10,8,5,0.82)'; cx.fillRect(0,0,W,H);
+  cx.textAlign='center'; cx.textBaseline='middle';
+
+  // Title
+  cx.fillStyle='#F0D060'; cx.font=`bold ${Math.min(28,W*0.065)|0}px monospace`;
+  cx.fillText('SELECT LEVEL',W/2,H*0.10);
+
+  // Card layout: 3 top row, 2 bottom centered (or single column on very narrow)
+  const cardW=Math.min(Math.floor((W-60)/3)-12, 145);
+  const cardH=Math.round(cardW*0.68);
+  const gapX=Math.min(18,cardW*0.1);
+
+  const rowW3=cardW*3+gapX*2;
+  const rowW2=cardW*2+gapX;
+  const row1X=(W-rowW3)/2, row1Y=H*0.20;
+  const row2X=(W-rowW2)/2, row2Y=row1Y+cardH+22;
+
+  const positions=[
+    {x:row1X,                 y:row1Y},
+    {x:row1X+cardW+gapX,      y:row1Y},
+    {x:row1X+(cardW+gapX)*2,  y:row1Y},
+    {x:row2X,                 y:row2Y},
+    {x:row2X+cardW+gapX,      y:row2Y},
+  ];
+
+  cardRects=[];
+  for(let li=0;li<LEVELS.length;li++){
+    const lv=LEVELS[li];
+    const {x,y}=positions[li];
+    const locked=li>prog.unlocked;
+    const done=prog.stars[li]>0;
+    cardRects.push({x,y,w:cardW,h:cardH,li});
+
+    // card bg
+    cx.fillStyle=locked?'rgba(20,16,12,0.85)':'rgba(30,26,18,0.92)';
+    rrect(x,y,cardW,cardH,8); cx.fill();
+
+    // border
+    cx.strokeStyle=locked?'#2A2420':done?lv.ac:'#4A3C20';
+    cx.lineWidth=locked?1:2;
+    rrect(x,y,cardW,cardH,8); cx.stroke();
+
+    // hover highlight if this is hovered (skip for now)
+
+    if(locked){
+      // Lock icon
+      cx.fillStyle='#302820'; cx.font=`bold ${cardH*0.35|0}px monospace`;
+      cx.fillText('🔒',x+cardW/2,y+cardH/2);
+      cx.fillStyle='#3A3020'; cx.font=`bold ${cardH*0.16|0}px monospace`;
+      cx.fillText(lv.name,x+cardW/2,y+cardH*0.82);
+    } else {
+      // Level number
+      cx.fillStyle=lv.ac; cx.font=`bold ${cardH*0.28|0}px monospace`;
+      cx.fillText(`0${li+1}`,x+cardW/2,y+cardH*0.28);
+
+      // Level name
+      const nameFs=Math.min(11,cardW*0.085)|0;
+      cx.fillStyle=lv.dc; cx.font=`bold ${nameFs}px monospace`;
+      cx.fillText(lv.name,x+cardW/2,y+cardH*0.50);
+
+      // Difficulty
+      cx.fillStyle='#706040'; cx.font=`${Math.max(8,nameFs-2)}px monospace`;
+      cx.fillText(lv.diff,x+cardW/2,y+cardH*0.64);
+
+      // Stars
+      const stars=prog.stars[li];
+      if(stars>0){
+        cx.fillStyle=lv.ac; cx.font=`${Math.max(9,cardH*0.14|0)}px monospace`;
+        cx.fillText('★'.repeat(stars)+'☆'.repeat(3-stars),x+cardW/2,y+cardH*0.84);
+      } else {
+        cx.fillStyle='#504030'; cx.font=`${Math.max(8,nameFs-1)}px monospace`;
+        cx.fillText(`TARGET ${lv.target}`,x+cardW/2,y+cardH*0.84);
+      }
+
+      // Best
+      if(prog.bests[li]>0){
+        cx.fillStyle='#5A4828'; cx.font=`${Math.max(7,nameFs-2)}px monospace`;
+        cx.fillText(`BEST ${prog.bests[li]}`,x+cardW/2,y+cardH*0.97);
+      }
+    }
+  }
+
+  // Back / ESC hint
+  const bw=80, bh=28, bx=roadL, by=H-50;
+  backRect={x:bx,y:by,w:bw,h:bh};
+  cx.fillStyle='rgba(0,0,0,0.4)'; rrect(bx,by,bw,bh,6); cx.fill();
+  cx.fillStyle='#504030'; cx.font='11px monospace';
+  cx.fillText('← BACK',bx+bw/2,by+bh/2);
+
+  // Controls note
+  cx.fillStyle='#3A3020'; cx.font='10px monospace';
+  cx.textBaseline='alphabetic';
+  cx.fillText('KEYBOARD  ← →  TO DODGE   ·   ESC  TO PAUSE',W/2,H-14);
+}
+
+// ── Level clear ───────────────────────────────────────────────────
+function drawClear(){
+  clearAnimT++;
+  cx.fillStyle='rgba(10,8,5,0.86)'; cx.fillRect(0,0,W,H);
+  cx.textAlign='center'; cx.textBaseline='middle';
+
+  const lv=LEVELS[curLevel];
+  const ac=lv.ac, dc=lv.dc;
+  const s=score>=lv.target*2?3:score>=lv.target*1.5?2:1;
+  const t=Math.min(1,clearAnimT/50);
+
+  cx.shadowColor=ac; cx.shadowBlur=22*t;
+  cx.fillStyle=dc; cx.font=`bold ${Math.min(40,W*0.09)|0}px monospace`;
+  cx.globalAlpha=t;
+  cx.fillText('LEVEL CLEAR',W/2,H*0.30);
+  cx.globalAlpha=1; cx.shadowBlur=0;
+
+  // Stars
+  if(clearAnimT>20){
+    const sa=Math.min(1,(clearAnimT-20)/30);
+    cx.globalAlpha=sa;
+    const fs=Math.min(38,W*0.09)|0;
+    cx.font=`${fs}px monospace`;
+    for(let i=0;i<3;i++){
+      cx.fillStyle=i<s?ac:'#2A2010';
+      cx.fillText('★',W/2+(i-1)*fs*1.2,H*0.43);
+    }
+    cx.globalAlpha=1;
+  }
+
+  // Score
+  if(clearAnimT>35){
+    cx.fillStyle=dc; cx.font=`bold ${Math.min(30,W*0.07)|0}px monospace`;
+    cx.fillText(String(score).padStart(6,'0'),W/2,H*0.55);
+    cx.fillStyle='#504030'; cx.font='11px monospace';
+    cx.fillText(`TARGET  ${lv.target}`,W/2,H*0.62);
+  }
+
+  // Next / menu button
+  if(clearAnimT>55&&Math.sin(Date.now()*0.0028)>0){
+    const hasNext=curLevel+1<LEVELS.length;
+    cx.fillStyle='#F0D060'; cx.font='bold 15px monospace';
+    cx.fillText(hasNext?'TAP  FOR  NEXT  LEVEL':'TAP  FOR  MENU',W/2,H*0.74);
+  }
+}
+
+// ── Game over ─────────────────────────────────────────────────────
+function drawDead(){
+  cx.fillStyle='rgba(10,8,5,0.84)'; cx.fillRect(0,0,W,H);
+  cx.textAlign='center';
+  cx.shadowColor='#FF3A10'; cx.shadowBlur=22;
+  cx.fillStyle='#FF3A10';
+  cx.font=`bold ${Math.min(50,W*0.11)|0}px monospace`; cx.textBaseline='alphabetic';
+  cx.fillText('WRECKED',W/2,H*0.38);
+  cx.shadowBlur=0;
+  cx.fillStyle='#F0D060'; cx.font=`bold ${Math.min(34,W*0.08)|0}px monospace`;
+  cx.textBaseline='middle';
+  cx.fillText(String(score).padStart(6,'0'),W/2,H*0.49);
+  const lv=LEVELS[curLevel];
+  cx.fillStyle='#584828'; cx.font='11px monospace';
+  cx.fillText(`TARGET  ${lv.target}  ·  LEVEL ${curLevel+1}  ${lv.name}`,W/2,H*0.57);
+  if(prog.bests[curLevel]>=score&&prog.bests[curLevel]>0){
+    cx.fillStyle='#4A3818'; cx.font='10px monospace';
+    cx.fillText(`BEST  ${prog.bests[curLevel]}`,W/2,H*0.62);
+  } else if(score>0){
+    cx.shadowColor='#F0C020'; cx.shadowBlur=12;
+    cx.fillStyle='#F0C020'; cx.font='bold 13px monospace';
+    cx.fillText('★  NEW BEST  ★',W/2,H*0.62);
+    cx.shadowBlur=0;
+  }
+  if(Math.sin(Date.now()*0.0028)>0){
+    cx.fillStyle='#F0D060'; cx.font='bold 14px monospace';
+    cx.fillText('TAP  TO  RETRY',W/2,H*0.73);
+  }
+  cx.fillStyle='#3A2E18'; cx.font='10px monospace';
+  cx.fillText('(or tap level select from menu)',W/2,H*0.80);
+}
+
+// ── Render ────────────────────────────────────────────────────────
+function render(){
+  cx.save();
+  if(shake>0) cx.translate((Math.random()-.5)*shake*0.9,(Math.random()-.5)*shake*0.5);
+
+  drawRoad();
+
+  if(ST==='title'){   drawTitle();       cx.restore(); return; }
+  if(ST==='levels'){  drawLevelSelect(); cx.restore(); return; }
+
+  // Beam
+  if(ST==='playing') drawBeam(pX,pY);
+
+  coins.forEach(drawCoin);
+  enemies.forEach(e=>drawCar(e.x,e.y,e.w,e.h,e.col,false));
+
+  if(ST==='playing'){
+    const show=pInv===0||(pInv/4|0)%2===0;
+    if(show) drawCar(pX,pY,CW,CH,{b:'#C81818',r:'#900E0E',w:'#A0D8EF'},true);
+  }
+
+  parts.forEach(p=>{
+    cx.globalAlpha=Math.max(0,p.life);
+    cx.fillStyle=p.col;
+    cx.beginPath(); cx.arc(p.x,p.y,Math.max(0.5,p.r),0,Math.PI*2); cx.fill();
+  });
+  cx.globalAlpha=1;
+
+  pops.forEach(p=>{
+    cx.globalAlpha=p.life;
+    cx.fillStyle=p.col; cx.font='bold 16px monospace';
+    cx.textAlign='center'; cx.textBaseline='middle';
+    cx.fillText(p.txt,p.x,p.y);
+  });
+  cx.globalAlpha=1;
+
+  if(ST==='playing') drawHUD();
+  if(ST==='clear')   drawClear();
+  if(ST==='dead')    drawDead();
+
+  cx.restore();
+}
+
+// ── Loop ──────────────────────────────────────────────────────────
+(function loop(){ update(); render(); requestAnimationFrame(loop); })();
+</script>
