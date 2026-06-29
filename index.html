@@ -4,29 +4,123 @@
   *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
   html,body{width:100%;height:100%;background:#0D0A07;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none}
   canvas{display:block;position:fixed;inset:0;cursor:default}
+  #profile-overlay{
+    position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+    background:rgba(10,8,5,0.92);z-index:10;font-family:monospace;
+  }
+  #profile-box{
+    background:#1A160E;border:2px solid #C8A030;border-radius:12px;
+    padding:32px 28px;max-width:340px;width:90%;text-align:center;
+  }
+  #profile-box h2{color:#F0D060;font-size:22px;margin-bottom:6px;letter-spacing:2px;}
+  #profile-box p{color:#6A5830;font-size:11px;margin-bottom:22px;letter-spacing:1px;}
+  #profile-box label{display:block;color:#A08840;font-size:11px;text-align:left;margin-bottom:4px;letter-spacing:1px;}
+  #profile-box input{
+    display:block;width:100%;background:#0D0A07;border:1px solid #4A3C18;
+    border-radius:6px;color:#F0D060;font-family:monospace;font-size:14px;
+    padding:9px 12px;margin-bottom:16px;outline:none;user-select:text;-webkit-user-select:text;
+  }
+  #profile-box input:focus{border-color:#C8A030;}
+  #profile-box button{
+    width:100%;background:#C8A030;color:#0D0A07;border:none;border-radius:6px;
+    font-family:monospace;font-size:14px;font-weight:bold;padding:11px;
+    cursor:pointer;letter-spacing:2px;margin-top:4px;
+  }
+  #profile-box button:hover{background:#F0D060;}
 </style>
 <canvas id="g"></canvas>
+<div id="profile-overlay">
+  <div id="profile-box">
+    <h2>HIGHWAY RUN</h2>
+    <p>TELL US ABOUT YOU</p>
+    <label for="inp-name">YOUR NAME</label>
+    <input id="inp-name" type="text" maxlength="20" placeholder="e.g. Alex" autocomplete="off">
+    <label for="inp-age">YOUR AGE</label>
+    <input id="inp-age" type="number" min="1" max="120" placeholder="e.g. 17" autocomplete="off">
+    <label for="inp-doing">WHAT ARE YOU DOING?</label>
+    <input id="inp-doing" type="text" maxlength="40" placeholder="e.g. taking a break" autocomplete="off">
+    <button id="profile-go">LET'S GO →</button>
+  </div>
+</div>
 <script>
 const cv = document.getElementById('g');
 const cx = cv.getContext('2d');
 
-// ── Level definitions ─────────────────────────────────────────────
-const LEVELS = [
-  { name:'CLEAR ROAD', diff:'EASY',      target:600,   ss:3.0, ms:5.5,  sb:100, sm:70,  ac:'#C8A030', dc:'#F0D060' },
-  { name:'COMMUTE',    diff:'NORMAL',    target:1800,  ss:4.0, ms:7.5,  sb:80,  sm:50,  ac:'#40C870', dc:'#70F090' },
-  { name:'HIGHWAY',    diff:'HARD',      target:4000,  ss:5.0, ms:9.5,  sb:60,  sm:34,  ac:'#4888E8', dc:'#80B8FF' },
-  { name:'RUSH HOUR',  diff:'VERY HARD', target:8000,  ss:6.0, ms:11.5, sb:44,  sm:22,  ac:'#E86830', dc:'#FFAA60' },
-  { name:'NIGHT RACE', diff:'EXTREME',   target:14000, ss:7.0, ms:14.0, sb:28,  sm:14,  ac:'#B040E0', dc:'#E080FF' },
+// ── Profile ───────────────────────────────────────────────────────
+let playerName='', playerAge='', playerDoing='';
+(function setupProfile(){
+  const overlay=document.getElementById('profile-overlay');
+  const btn=document.getElementById('profile-go');
+  const inpName=document.getElementById('inp-name');
+  const inpAge=document.getElementById('inp-age');
+  const inpDoing=document.getElementById('inp-doing');
+  // Allow text input on the overlay without canvas touch-action blocking it
+  overlay.addEventListener('touchstart',e=>e.stopPropagation(),true);
+  overlay.addEventListener('touchend',e=>e.stopPropagation(),true);
+  function submit(){
+    const n=inpName.value.trim(), a=inpAge.value.trim(), d=inpDoing.value.trim();
+    if(!n||!a||!d){ inpName.style.borderColor=n?'#4A3C18':'#FF4040';
+      inpAge.style.borderColor=a?'#4A3C18':'#FF4040';
+      inpDoing.style.borderColor=d?'#4A3C18':'#FF4040'; return; }
+    playerName=n; playerAge=a; playerDoing=d;
+    overlay.style.display='none';
+  }
+  btn.addEventListener('click',submit);
+  [inpName,inpAge,inpDoing].forEach(el=>el.addEventListener('keydown',e=>{ if(e.key==='Enter') submit(); }));
+})();
+
+// ── Level generation (100 levels, bosses at 10,20,30…100) ─────────
+const _TIER_NAMES=[
+  ['CLEAR ROAD','COMMUTE','HIGHWAY','RUSH HOUR','NIGHT RACE','STORM RUN','CITY BLITZ','CROSSFIRE','LAST STAND'],
+  ['DESERT RUN','MTN PASS','BRIDGE RUSH','TUNNEL DASH','FOG DRIVE','ICE ROAD','CANYON RUN','COAST SPEED','METRO RUSH'],
+  ['RAIN RUN','THUNDER RD','SAND DRIFT','VALLEY RD','CLIFF EDGE','DUSK DRIVE','BACK ROAD','UPHILL','DOWNHILL'],
+  ['LAKESIDE','FOREST PATH','URBAN RUN','NEON BLVD','OVERPASS','DEAD END','GRIDLOCK','SPRINT','OVERTAKE'],
+  ['DRAG RACE','STREET RUN','FREEWAY','MIDNIGHT','DRIFT ZONE','APEX','CHICANE','SERPENTINE','SWITCHBACK'],
+  ['OVERDRIVE','REDLINE','SLAM','PUNCH IT','HAMMER','THROTTLE','BURNOUT','REV LIMITER','SCREECH'],
+  ['HEAT WAVE','BLACKOUT','VAPOR','MIRAGE','ECLIPSE','NOVA','SURGE','PULSE','SPARK'],
+  ['SUPERNOVA','FLARE','VORTEX','TORNADO','CYCLONE','TYPHOON','HURRICANE','TSUNAMI','AVALANCHE'],
+  ['MACH 1','MACH 2','SONIC','HYPERDRIVE','WARPZONE','VELOCITY','TERMINAL','MAXOUT','ZENITH'],
+  ['ULTRA RUN','OMEGA','ALPHA','SIGMA','DELTA','EPSILON','GAMMA','THETA','OBLIVION'],
 ];
+const _TIER_COLS=[
+  {ac:'#C8A030',dc:'#F0D060'},{ac:'#40C870',dc:'#70F090'},{ac:'#4888E8',dc:'#80B8FF'},
+  {ac:'#E86830',dc:'#FFAA60'},{ac:'#B040E0',dc:'#E080FF'},{ac:'#20C8E8',dc:'#60E8FF'},
+  {ac:'#E8C820',dc:'#FFEC60'},{ac:'#E83060',dc:'#FF7090'},{ac:'#40C8A0',dc:'#70F8C8'},
+  {ac:'#C040E0',dc:'#F070FF'},
+];
+const _DIFFS=['EASY','NORMAL','HARD','VERY HARD','EXTREME','BRUTAL','INSANE','LEGENDARY'];
+function _genLevel(i){
+  const n=i+1, boss=n%10===0, tier=Math.floor(i/10), slot=i%10;
+  const t=i/99;
+  const base=300+200*i+3*i*i;
+  const target=Math.round(base*(boss?1.6:1));
+  const ss=+Math.min(14,(3.0+t*9.5)).toFixed(1);
+  const ms=+Math.min(25,(5.5+t*16.5)).toFixed(1);
+  const sb=Math.max(12,Math.round(100-t*88));
+  const sm=Math.max(5, Math.round(70-t*66));
+  const col=boss?{ac:'#FF2020',dc:'#FF6060'}:_TIER_COLS[tier];
+  const name=boss?`BOSS  LV${n}`:_TIER_NAMES[tier][slot];
+  const diff=boss?'BOSS':_DIFFS[Math.min(7,Math.floor(t*8))];
+  return {name,diff,target,ss,ms,sb,sm,ac:col.ac,dc:col.dc,boss};
+}
+const LEVELS=Array.from({length:100},(_,i)=>_genLevel(i));
 // ss=start speed, ms=max speed, sb=spawn base (frames), sm=spawn min, ac=accent, dc=display color
 
 // ── Progress ──────────────────────────────────────────────────────
 let prog = loadProg();
 function loadProg(){
-  try{ return JSON.parse(localStorage.getItem('hr4'))||defProg(); }catch{ return defProg(); }
+  try{ return _fixProg(JSON.parse(localStorage.getItem('hr5'))||defProg()); }catch{ return defProg(); }
 }
-function defProg(){ return {unlocked:0, bests:[0,0,0,0,0], stars:[0,0,0,0,0]}; }
-function saveProg(){ localStorage.setItem('hr4', JSON.stringify(prog)); }
+function defProg(){ return {unlocked:0, bests:Array(100).fill(0), stars:Array(100).fill(0), gold:0, xp:0, lastDaily:''}; }
+function _fixProg(p){
+  if(!p.gold)     p.gold=0;
+  if(!p.xp)       p.xp=0;
+  if(!p.lastDaily)p.lastDaily='';
+  if(!p.bests||p.bests.length<100) p.bests=Array(100).fill(0);
+  if(!p.stars||p.stars.length<100) p.stars=Array(100).fill(0);
+  return p;
+}
+function saveProg(){ localStorage.setItem('hr5', JSON.stringify(prog)); }
 
 // ── Sizing ────────────────────────────────────────────────────────
 let W, H, DPR, roadL, roadR, roadW, laneW;
@@ -68,6 +162,53 @@ let enemies=[], coins=[], parts=[], pops=[];
 let shake=0, spawnT=0, coinT=0, combo=0, comboT=0;
 let cardRects=[];       // level-select hit areas
 let clearAnimT=0;       // timer for clear screen animation
+let levelPage=0;        // which page of levels (0-9, 10 levels each)
+
+// ── AI player ─────────────────────────────────────────────────────
+const AI_COL={b:'#0A2848',r:'#061428',w:'#50B8FF'};
+let ai2={lane:0,x:0,tx:0,score:0,inv:0,alive:true,respawnT:0};
+const AI_Y=()=>H-210; // fixed y position above human player
+
+// ── Boss (spawns every 10th level; levels 10, 20, ...) ────────────
+const BOSS_COL={b:'#3C0808',r:'#220404',w:'#FF8080'};
+let boss=null, bossSpawned=false;
+
+// ── Game mode ─────────────────────────────────────────────────────
+// 'solo' | 'with-ai' | '2player' | '2player-ai'
+let gameMode='solo';
+let modeRects=[];
+
+// ── Player 2 (human) ──────────────────────────────────────────────
+const P2_COL={b:'#0E3818',r:'#061E0A',w:'#70FF98'};
+const P2_Y=()=>H-175;
+let p2Lane=0, p2X=0, p2TX=0, p2Inv=0, p2Alive=true, p2RespawnT=0;
+
+// ── Mode carousel ─────────────────────────────────────────────────
+const _GAME_MODES=[
+  {id:'solo',       label:'CHALLENGE',   icon:'📍', desc:'PASS LEVELS IN ORDER',  col:'#C8A030',bg1:'#0A150A',bg2:'#0A1A15'},
+  {id:'with-ai',    label:'CAREER RACE', icon:'🤖', desc:'RACE WITH AI COMPANION', col:'#9040E8',bg1:'#08051A',bg2:'#180828'},
+  {id:'2player',    label:'ENDLESS',     icon:'♾',  desc:'2 PLAYERS · ONE SCREEN', col:'#C84020',bg1:'#1A0808',bg2:'#0A0A0A'},
+  {id:'2player-ai', label:'FREE RIDE',   icon:'⚡', desc:'2 PLAYERS + AI CAR',     col:'#2090C8',bg1:'#0A1A2A',bg2:'#102030'},
+];
+let modeCardIndex=0;
+
+// ── Island map constants ───────────────────────────────────────────
+const _MAP_PINS=[
+  [0.52,0.74],[0.36,0.78],[0.20,0.68],[0.12,0.52],[0.18,0.36],
+  [0.32,0.24],[0.50,0.17],[0.68,0.21],[0.80,0.36],[0.84,0.54],
+];
+const _ISLAND_PTS=[
+  [0.09,0.56],[0.11,0.38],[0.20,0.20],[0.36,0.10],[0.54,0.06],
+  [0.72,0.09],[0.86,0.22],[0.92,0.40],[0.90,0.60],[0.80,0.76],
+  [0.64,0.86],[0.46,0.88],[0.28,0.82],[0.14,0.70],
+];
+const _MAP_TREES=[
+  [0.30,0.48],[0.34,0.40],[0.44,0.36],[0.56,0.34],[0.66,0.44],
+  [0.68,0.54],[0.60,0.64],[0.48,0.67],[0.36,0.62],[0.24,0.58],
+  [0.42,0.52],[0.52,0.46],[0.58,0.52],[0.38,0.44],[0.50,0.56],
+];
+let selectedMapPin=-1;
+let _pinRects=[], _playRect=null;
 
 // ── Helpers ───────────────────────────────────────────────────────
 function rrect(x,y,w,h,r){
@@ -264,10 +405,145 @@ function sparkle(x,y,ac){
 
 function pop(txt,x,y,col){ pops.push({txt,x,y,col:col||'#F0D060',life:1}); }
 
+// ── AI player logic ───────────────────────────────────────────────
+function initAI2(){
+  ai2.lane=2; ai2.x=lx(2); ai2.tx=lx(2);
+  ai2.score=0; ai2.inv=120; ai2.alive=true; ai2.respawnT=0;
+}
+
+function updateAI2(){
+  if(!ai2.alive){
+    if(--ai2.respawnT<=0){
+      ai2.alive=true;
+      ai2.lane=Math.floor(Math.random()*LANES);
+      ai2.tx=lx(ai2.lane); ai2.inv=120;
+    }
+    return;
+  }
+  if(ai2.inv>0) ai2.inv--;
+  ai2.x+=(ai2.tx-ai2.x)*0.22;
+  const aiy=AI_Y();
+
+  // Every 18 frames, pick the safest lane
+  if(frame%18===0){
+    const danger=[0,0,0];
+    for(const e of enemies){
+      const dy=e.y-aiy;
+      if(dy>-200&&dy<90) danger[e.lane]+=Math.max(0,200-Math.abs(dy));
+    }
+    if(boss&&boss.phase==='fight'){
+      const bl=Math.max(0,Math.min(LANES-1, Math.round((boss.x-roadL)/laneW)));
+      danger[bl]+=300;
+    }
+    let best=ai2.lane;
+    for(let l=0;l<LANES;l++) if(danger[l]<danger[best]) best=l;
+    if(best!==ai2.lane){ ai2.lane=best; ai2.tx=lx(best); }
+  }
+
+  // Collect coins
+  for(let i=coins.length-1;i>=0;i--){
+    const c=coins[i];
+    if(Math.abs(c.x-ai2.x)<CW*0.7&&Math.abs(c.y-aiy)<CH*0.7){
+      ai2.score+=50; sparkle(c.x,c.y,'#60C8FF'); coins.splice(i,1);
+    }
+  }
+
+  // Enemy collision
+  if(ai2.inv===0){
+    for(const e of enemies){
+      if(Math.abs(e.x-ai2.x)<(CW+e.w)*0.37&&Math.abs(e.y-aiy)<(CH+e.h)*0.37){
+        ai2.alive=false; ai2.respawnT=200; boom(ai2.x,aiy); shake=Math.max(shake,8); break;
+      }
+    }
+  }
+}
+
+// ── Boss logic ────────────────────────────────────────────────────
+function spawnBoss(){
+  bossSpawned=true;
+  const hp=400+curLevel*80;
+  boss={x:W/2,y:-220,w:laneW*1.85,h:EH*2.5,hp,maxHp:hp,tx:W/2,phase:'enter',dieT:0,tick:0};
+  pop('⚠  BOSS  INCOMING  ⚠',W/2,H*0.38,'#FF3020');
+}
+
+function updateBoss(){
+  if(!boss) return;
+  boss.tick++;
+
+  if(boss.phase==='enter'){
+    boss.y+=(H*0.22-boss.y)*0.04+2;
+    if(boss.y>=H*0.22) boss.phase='fight';
+    return;
+  }
+
+  if(boss.phase==='fight'){
+    // Chase player with a lag
+    boss.tx=lx(pLane)+Math.sin(boss.tick*0.05)*laneW*0.4;
+    boss.x+=(boss.tx-boss.x)*0.018;
+    // Slowly creep down then bounce back up
+    boss.y+=Math.sin(boss.tick*0.02)*0.6;
+
+    // HP drains as player survives near it
+    boss.hp-=0.55;
+
+    // Player collision
+    if(pInv===0){
+      if(Math.abs(boss.x-pX)<(CW/2+boss.w/2)*0.72&&Math.abs(boss.y-pY)<(CH/2+boss.h/2)*0.72){
+        die(); return;
+      }
+    }
+    // AI collision
+    if(ai2.alive&&ai2.inv===0){
+      const aiy=AI_Y();
+      if(Math.abs(boss.x-ai2.x)<(CW/2+boss.w/2)*0.72&&Math.abs(boss.y-aiy)<(CH/2+boss.h/2)*0.72){
+        ai2.alive=false; ai2.respawnT=220; boom(ai2.x,aiy);
+      }
+    }
+
+    if(boss.hp<=0){
+      boss.phase='die'; boss.dieT=90;
+      boom(boss.x,boss.y); boom(boss.x-45,boss.y+25); boom(boss.x+45,boss.y-25);
+      score+=Math.round(LEVELS[curLevel].target*0.15);
+      pop(`BOSS  DEFEATED! +${Math.round(LEVELS[curLevel].target*0.15)}`,W/2,H*0.42,'#FF6040');
+      shake=Math.max(shake,26);
+    }
+    return;
+  }
+
+  if(boss.phase==='die'){
+    if(boss.tick%5===0) boom(boss.x+(Math.random()-.5)*boss.w, boss.y+(Math.random()-.5)*boss.h);
+    if(--boss.dieT<=0) boss=null;
+  }
+}
+
+function drawBoss(){
+  if(!boss) return;
+  if(boss.phase==='die'&&boss.dieT%4<2) return;
+  cx.save();
+  cx.shadowColor='#FF2020'; cx.shadowBlur=34;
+  drawCar(boss.x,boss.y,boss.w,boss.h,BOSS_COL,false);
+  cx.shadowBlur=0;
+  if(boss.phase==='fight'){
+    const bw=130,bh=11,bx=W/2-65,by=boss.y-boss.h/2-24;
+    cx.fillStyle='rgba(0,0,0,0.65)'; rrect(bx,by,bw,bh,4); cx.fill();
+    const frac=Math.max(0,boss.hp/boss.maxHp);
+    cx.fillStyle=frac>0.5?'#E82020':frac>0.25?'#E87020':'#E8E020';
+    rrect(bx,by,bw*frac,bh,4); cx.fill();
+    cx.fillStyle='#FF5040'; cx.font='bold 10px monospace';
+    cx.textAlign='center'; cx.textBaseline='alphabetic';
+    cx.fillText('BOSS',W/2,by-5);
+  }
+  cx.restore();
+}
+
 // ── Lane move ─────────────────────────────────────────────────────
 function moveLane(d){
   const nl=Math.max(0,Math.min(LANES-1,pLane+d));
   if(nl!==pLane){pLane=nl; pTX=lx(pLane);}
+}
+function moveP2Lane(d){
+  const nl=Math.max(0,Math.min(LANES-1,p2Lane+d));
+  if(nl!==p2Lane){p2Lane=nl; p2TX=lx(p2Lane);}
 }
 
 // ── Tilt / gyroscope steering ─────────────────────────────────────
@@ -317,11 +593,28 @@ const keys={};
 document.addEventListener('keydown',e=>{
   if(keys[e.key]) return; keys[e.key]=true;
   if(ST==='playing'){
-    if(e.key==='ArrowLeft'||e.key==='a'||e.key==='A') moveLane(-1);
-    if(e.key==='ArrowRight'||e.key==='d'||e.key==='D') moveLane(1);
+    const is2p=gameMode==='2player'||gameMode==='2player-ai';
+    if(e.key==='ArrowLeft') moveLane(-1);
+    if(e.key==='ArrowRight') moveLane(1);
+    if(is2p){
+      if(e.key==='a'||e.key==='A') moveP2Lane(-1);
+      if(e.key==='d'||e.key==='D') moveP2Lane(1);
+    } else {
+      if(e.key==='a'||e.key==='A') moveLane(-1);
+      if(e.key==='d'||e.key==='D') moveLane(1);
+    }
     if(e.key==='Escape'){ ST='levels'; }
   } else if(ST==='title'){
+    if(e.key===' '||e.key==='Enter') ST='mode-select';
+    if(e.key==='ArrowRight'||e.key==='d'||e.key==='D'){ jumpToLevelPage(prog.unlocked); ST='levels'; }
+  } else if(ST==='mode-select'){
+    if(e.key==='Escape') ST='title';
     if(e.key===' '||e.key==='Enter') ST='levels';
+  } else if(ST==='levels'){
+    if(e.key==='ArrowLeft'||e.key==='a'||e.key==='A'){ levelPage=Math.max(0,levelPage-1); selectedMapPin=-1; }
+    if(e.key==='ArrowRight'||e.key==='d'||e.key==='D'){ levelPage=Math.min(9,levelPage+1); selectedMapPin=-1; }
+    if(e.key==='Escape') ST='mode-select';
+    if((e.key===' '||e.key==='Enter')&&selectedMapPin>=0&&selectedMapPin<=prog.unlocked) go(selectedMapPin);
   } else if(ST==='clear'||ST==='dead'){
     if(e.key===' '||e.key==='Enter') handleClearDeadAction();
   }
@@ -332,9 +625,19 @@ cv.addEventListener('touchstart',e=>{
   e.preventDefault();
   const tx=e.touches[0].clientX, ty=e.touches[0].clientY;
   if(ST==='playing'){
-    if(tx<W*0.5) moveLane(-1); else moveLane(1);
+    const is2p=gameMode==='2player'||gameMode==='2player-ai';
+    if(is2p){
+      if(tx<W*0.25) moveLane(-1);
+      else if(tx<W*0.5) moveLane(1);
+      else if(tx<W*0.75) moveP2Lane(-1);
+      else moveP2Lane(1);
+    } else {
+      if(tx<W*0.5) moveLane(-1); else moveLane(1);
+    }
   } else if(ST==='title'){
-    ST='levels';
+    handleTitleTap(tx,ty);
+  } else if(ST==='mode-select'){
+    handleModeTap(tx,ty);
   } else if(ST==='levels'){
     handleLevelTap(tx,ty);
   } else if(ST==='clear'||ST==='dead'){
@@ -344,31 +647,261 @@ cv.addEventListener('touchstart',e=>{
 
 cv.addEventListener('click',e=>{
   const tx=e.clientX, ty=e.clientY;
-  if(ST==='title') ST='levels';
+  if(ST==='title') handleTitleTap(e.clientX,e.clientY);
+  else if(ST==='mode-select') handleModeTap(e.clientX,e.clientY);
   else if(ST==='levels') handleLevelTap(tx,ty);
   else if(ST==='clear'||ST==='dead') handleClearDeadAction();
 });
 
 function handleLevelTap(tx,ty){
-  for(const r of cardRects){
+  if(backRect&&tx>=backRect.x&&tx<=backRect.x+backRect.w&&ty>=backRect.y&&ty<=backRect.y+backRect.h){
+    ST='mode-select'; return;
+  }
+  if(_prevRect&&tx>=_prevRect.x&&tx<=_prevRect.x+_prevRect.w&&ty>=_prevRect.y&&ty<=_prevRect.y+_prevRect.h){
+    levelPage=Math.max(0,levelPage-1); selectedMapPin=-1; return;
+  }
+  if(_nextRect&&tx>=_nextRect.x&&tx<=_nextRect.x+_nextRect.w&&ty>=_nextRect.y&&ty<=_nextRect.y+_nextRect.h){
+    levelPage=Math.min(9,levelPage+1); selectedMapPin=-1; return;
+  }
+  if(_playRect&&tx>=_playRect.x&&tx<=_playRect.x+_playRect.w&&ty>=_playRect.y&&ty<=_playRect.y+_playRect.h){
+    if(selectedMapPin>=0&&selectedMapPin<=prog.unlocked) go(selectedMapPin); return;
+  }
+  for(const r of _pinRects){
     if(tx>=r.x&&tx<=r.x+r.w&&ty>=r.y&&ty<=r.y+r.h){
-      if(r.li<=prog.unlocked) go(r.li);
+      if(r.li<=prog.unlocked) selectedMapPin=r.li;
       return;
     }
-  }
-  // back button
-  if(backRect&&tx>=backRect.x&&tx<=backRect.x+backRect.w&&ty>=backRect.y&&ty<=backRect.y+backRect.h){
-    ST='title';
   }
 }
 
 function handleClearDeadAction(){
   if(ST==='clear'){
     const next=curLevel+1;
-    if(next<LEVELS.length) go(next); else ST='levels';
+    if(next<LEVELS.length){ go(next); }
+    else { levelPage=9; ST='levels'; }
   } else {
     go(curLevel);
   }
+}
+
+// jump level-select page to show a given level index
+function jumpToLevelPage(li){ levelPage=Math.floor(li/10); }
+
+function handleModeTap(tx,ty){
+  for(const r of modeRects){
+    if(tx>=r.x&&tx<=r.x+r.w&&ty>=r.y&&ty<=r.y+r.h){
+      if(r.id==='prev'){ modeCardIndex=Math.max(0,modeCardIndex-1); }
+      else if(r.id==='next'){ modeCardIndex=Math.min(3,modeCardIndex+1); }
+      else if(r.id==='play'){ gameMode=_GAME_MODES[modeCardIndex].id; jumpToLevelPage(prog.unlocked); selectedMapPin=prog.unlocked; ST='levels'; }
+      else if(r.id==='back'){ ST='title'; }
+      else { modeCardIndex=r.idx; gameMode=_GAME_MODES[r.idx].id; }
+      return;
+    }
+  }
+}
+
+// ── Mode card scene background ─────────────────────────────────────
+function _drawModeCardScene(x,y,w,h,modeId){
+  cx.save(); cx.beginPath(); rrect(x,y,w,h,10); cx.clip();
+  const m=_GAME_MODES.find(g=>g.id===modeId)||_GAME_MODES[0];
+  // gradient background
+  const grd=cx.createLinearGradient(x,y,x,y+h);
+  grd.addColorStop(0,m.bg1); grd.addColorStop(1,m.bg2);
+  cx.fillStyle=grd; cx.fillRect(x,y,w,h);
+
+  if(modeId==='solo'){
+    // mini island silhouette
+    cx.fillStyle='#1A3010'; cx.beginPath();
+    cx.ellipse(x+w*0.5,y+h*0.72,w*0.38,h*0.18,0,0,Math.PI*2); cx.fill();
+    cx.strokeStyle='#2A5020'; cx.lineWidth=1.5;
+    // winding road dots
+    for(let i=0;i<5;i++){
+      const rx=x+w*(0.28+i*0.11), ry=y+h*(0.62+Math.sin(i)*0.06);
+      cx.beginPath(); cx.arc(rx,ry,2,0,Math.PI*2);
+      cx.fillStyle='#C8A030'; cx.fill();
+    }
+    // trees
+    ['#1A4010','#183810','#204818'].forEach((c,i)=>{
+      cx.fillStyle=c;
+      cx.beginPath(); cx.arc(x+w*(0.22+i*0.28),y+h*0.59,w*0.04,0,Math.PI*2); cx.fill();
+    });
+  } else if(modeId==='with-ai'){
+    // speed streaks
+    for(let i=0;i<8;i++){
+      const sy=y+h*(0.15+i*0.09);
+      const len=w*(0.25+Math.sin(i*1.3)*0.15);
+      cx.strokeStyle=`rgba(160,80,240,${0.15+i*0.04})`;
+      cx.lineWidth=1.5;
+      cx.beginPath(); cx.moveTo(x+w*0.1,sy); cx.lineTo(x+w*0.1+len,sy); cx.stroke();
+    }
+    // robot icon area
+    cx.fillStyle='rgba(160,80,240,0.15)';
+    cx.beginPath(); cx.arc(x+w*0.65,y+h*0.46,w*0.19,0,Math.PI*2); cx.fill();
+    cx.fillStyle='#B060F0'; cx.font=`${w*0.25|0}px serif`;
+    cx.textAlign='center'; cx.textBaseline='middle';
+    cx.fillText('🤖',x+w*0.65,y+h*0.47);
+  } else if(modeId==='2player'){
+    // vanishing-point road
+    cx.strokeStyle='rgba(200,64,32,0.25)'; cx.lineWidth=1;
+    cx.beginPath(); cx.moveTo(x+w*0.5,y+h*0.3); cx.lineTo(x+w*0.1,y+h); cx.stroke();
+    cx.beginPath(); cx.moveTo(x+w*0.5,y+h*0.3); cx.lineTo(x+w*0.9,y+h); cx.stroke();
+    // lane marks
+    for(let i=0;i<4;i++){
+      const fy=0.4+i*0.15;
+      const lw=w*(0.02+i*0.015);
+      cx.strokeStyle=`rgba(200,64,32,${0.3+i*0.1})`; cx.lineWidth=1;
+      cx.beginPath(); cx.moveTo(x+w*0.5-lw,y+h*fy); cx.lineTo(x+w*0.5+lw,y+h*fy); cx.stroke();
+    }
+    // glow sides
+    const g2=cx.createLinearGradient(x,y,x+w,y);
+    g2.addColorStop(0,'rgba(200,64,32,0.18)'); g2.addColorStop(0.5,'transparent'); g2.addColorStop(1,'rgba(200,64,32,0.18)');
+    cx.fillStyle=g2; cx.fillRect(x,y,w,h);
+  } else {
+    // FREE RIDE: sky + road horizon
+    const skyG=cx.createLinearGradient(x,y,x,y+h*0.55);
+    skyG.addColorStop(0,'#0A1A2A'); skyG.addColorStop(1,'#1A3040');
+    cx.fillStyle=skyG; cx.fillRect(x,y,w,y+h*0.55);
+    cx.fillStyle='#1A1408'; cx.fillRect(x,y+h*0.55,w,h*0.45);
+    // road
+    cx.fillStyle='#252018'; cx.fillRect(x+w*0.25,y+h*0.55,w*0.5,h*0.45);
+    // horizon line
+    cx.strokeStyle='rgba(32,144,200,0.5)'; cx.lineWidth=1.5;
+    cx.beginPath(); cx.moveTo(x,y+h*0.55); cx.lineTo(x+w,y+h*0.55); cx.stroke();
+    // speed lines
+    for(let i=0;i<4;i++){
+      cx.strokeStyle=`rgba(32,144,200,${0.1+i*0.05})`; cx.lineWidth=1;
+      cx.beginPath(); cx.moveTo(x+w*0.5,y+h*0.55); cx.lineTo(x+w*(0.2+i*0.2),y+h); cx.stroke();
+    }
+  }
+  cx.restore();
+}
+
+// ── Mode select screen (horizontal card carousel) ─────────────────
+function drawModeSelect(){
+  // full background
+  cx.fillStyle='#080808'; cx.fillRect(0,0,W,H);
+  // subtle top bar
+  const tbH=44;
+  cx.fillStyle='rgba(0,0,0,0.7)'; cx.fillRect(0,0,W,tbH);
+  // back button
+  const bbW=70, bbH=30, bbX=12, bbY=7;
+  modeRects=[{x:bbX,y:bbY,w:bbW,h:bbH,id:'back'}];
+  cx.fillStyle='rgba(255,255,255,0.06)'; rrect(bbX,bbY,bbW,bbH,6); cx.fill();
+  cx.fillStyle='#888'; cx.font='bold 12px monospace';
+  cx.textAlign='center'; cx.textBaseline='middle';
+  cx.fillText('◀ BACK',bbX+bbW/2,bbY+bbH/2);
+  // title
+  cx.fillStyle='#F0D060'; cx.font=`bold ${Math.min(18,W*0.043)|0}px monospace`;
+  cx.textAlign='center'; cx.textBaseline='middle';
+  cx.fillText('SELECT  MODE',W/2,tbH/2);
+
+  // card layout
+  const gap=10, featW=Math.min(W*0.38,180), smallW=Math.min(W*0.19,90);
+  const featH=Math.min(H*0.62,300), smallH=Math.round(featH*0.78);
+  const totalCardsW=featW+gap+3*smallW+gap*2;
+  const startX=(W-totalCardsW)/2;
+  const midY=tbH+(H-tbH-80)/2;
+
+  // draw 4 cards: featured on left, 3 others to right
+  const order=[modeCardIndex, ...([0,1,2,3].filter(i=>i!==modeCardIndex))];
+  order.forEach((mi,slot)=>{
+    const m=_GAME_MODES[mi];
+    const isFeat=slot===0;
+    const cw=isFeat?featW:smallW;
+    const ch=isFeat?featH:smallH;
+    const cx_pos=isFeat?startX:startX+featW+gap+(slot-1)*(smallW+gap);
+    const cy_pos=isFeat?midY-featH/2:midY-smallH/2;
+
+    _drawModeCardScene(cx_pos,cy_pos,cw,ch,m.id);
+
+    // card border
+    if(isFeat){
+      cx.shadowColor=m.col; cx.shadowBlur=18;
+      cx.strokeStyle=m.col; cx.lineWidth=2.5;
+    } else {
+      cx.shadowBlur=0;
+      cx.strokeStyle='rgba(255,255,255,0.12)'; cx.lineWidth=1.2;
+    }
+    rrect(cx_pos,cy_pos,cw,ch,10); cx.stroke();
+    cx.shadowBlur=0;
+
+    // dim overlay for non-featured
+    if(!isFeat){
+      cx.fillStyle='rgba(0,0,0,0.42)'; rrect(cx_pos,cy_pos,cw,ch,10); cx.fill();
+    }
+
+    // card label at top
+    cx.fillStyle=isFeat?m.col:'rgba(255,255,255,0.5)';
+    cx.font=`bold ${isFeat?Math.min(14,cw*0.077)|0:Math.min(9,cw*0.10)|0}px monospace`;
+    cx.textAlign='center'; cx.textBaseline='top';
+    cx.fillText(m.label,cx_pos+cw/2,cy_pos+8);
+
+    // big icon center
+    cx.font=`${isFeat?cw*0.32|0:cw*0.36|0}px serif`;
+    cx.textAlign='center'; cx.textBaseline='middle';
+    cx.fillStyle='#fff';
+    cx.fillText(m.icon,cx_pos+cw/2,cy_pos+ch*(isFeat?0.52:0.54));
+
+    if(isFeat){
+      // description
+      cx.fillStyle='rgba(255,255,255,0.65)'; cx.font=`${Math.min(10,cw*0.058)|0}px monospace`;
+      cx.textAlign='center'; cx.textBaseline='middle';
+      cx.fillText(m.desc,cx_pos+cw/2,cy_pos+ch*0.78);
+      // selected badge
+      cx.fillStyle=m.col+'44'; rrect(cx_pos+cw*0.15,cy_pos+ch*0.86,cw*0.7,20,8); cx.fill();
+      cx.strokeStyle=m.col; cx.lineWidth=1; rrect(cx_pos+cw*0.15,cy_pos+ch*0.86,cw*0.7,20,8); cx.stroke();
+      cx.fillStyle=m.col; cx.font=`bold ${Math.min(10,cw*0.065)|0}px monospace`;
+      cx.textBaseline='middle';
+      cx.fillText('✓ SELECTED',cx_pos+cw/2,cy_pos+ch*0.86+10);
+    }
+
+    // tap target
+    modeRects.push({x:cx_pos,y:cy_pos,w:cw,h:ch,id:'card',idx:mi});
+  });
+
+  // ── Bottom bar ────────────────────────────────────────────────────
+  const barY=H-72, barH=72;
+  cx.fillStyle='rgba(0,0,0,0.80)'; cx.fillRect(0,barY,W,barH);
+  cx.strokeStyle='rgba(255,255,255,0.07)'; cx.lineWidth=1;
+  cx.beginPath(); cx.moveTo(0,barY); cx.lineTo(W,barY); cx.stroke();
+
+  const feat=_GAME_MODES[modeCardIndex];
+  // prev arrow
+  const arrW=44, arrH=44, arrY=barY+(barH-arrH)/2;
+  const prevX=14;
+  cx.fillStyle=modeCardIndex>0?'rgba(255,255,255,0.1)':'rgba(255,255,255,0.03)';
+  rrect(prevX,arrY,arrW,arrH,8); cx.fill();
+  cx.fillStyle=modeCardIndex>0?'#C8A030':'#333';
+  cx.font='bold 20px monospace'; cx.textAlign='center'; cx.textBaseline='middle';
+  cx.fillText('◀◀',prevX+arrW/2,arrY+arrH/2);
+  modeRects.push({x:prevX,y:arrY,w:arrW,h:arrH,id:'prev'});
+
+  // next arrow
+  const nextX=W-14-arrW;
+  cx.fillStyle=modeCardIndex<3?'rgba(255,255,255,0.1)':'rgba(255,255,255,0.03)';
+  rrect(nextX,arrY,arrW,arrH,8); cx.fill();
+  cx.fillStyle=modeCardIndex<3?'#C8A030':'#333';
+  cx.fillText('▶▶',nextX+arrW/2,arrY+arrH/2);
+  modeRects.push({x:nextX,y:arrY,w:arrW,h:arrH,id:'next'});
+
+  // center text
+  cx.fillStyle='#C8A030'; cx.font=`bold ${Math.min(11,W*0.028)|0}px monospace`;
+  cx.textAlign='center'; cx.textBaseline='alphabetic';
+  cx.fillText('GAME MODE',W/2,barY+22);
+  cx.fillStyle='#fff'; cx.font=`bold ${Math.min(15,W*0.036)|0}px monospace`;
+  cx.textBaseline='alphabetic';
+  cx.fillText(feat.label+' MODE',W/2,barY+42);
+
+  // play button
+  const pbW=90,pbH=36,pbX=(W-pbW)/2,pbY=barY+barH-pbH-6;
+  cx.fillStyle=feat.col+'CC'; rrect(pbX,pbY,pbW,pbH,10); cx.fill();
+  cx.shadowColor=feat.col; cx.shadowBlur=10;
+  cx.strokeStyle=feat.col; cx.lineWidth=1.5; rrect(pbX,pbY,pbW,pbH,10); cx.stroke();
+  cx.shadowBlur=0;
+  cx.fillStyle='#000'; cx.font=`bold ${Math.min(13,pbW*0.145)|0}px monospace`;
+  cx.textAlign='center'; cx.textBaseline='middle';
+  cx.fillText('▶  PLAY',pbX+pbW/2,pbY+pbH/2);
+  modeRects.push({x:pbX,y:pbY,w:pbW,h:pbH,id:'play'});
 }
 
 // ── Spawn helpers ─────────────────────────────────────────────────
@@ -389,6 +922,13 @@ function go(li){
   shake=0; spawnT=0; coinT=0; combo=0; comboT=0;
   // Recalibrate tilt center so wherever they hold the phone is "straight"
   tiltBaseline=tiltGamma; tiltLaneLeft=false; tiltLaneRight=false;
+  // AI player + boss
+  boss=null; bossSpawned=false;
+  const hasAI=gameMode==='with-ai'||gameMode==='2player-ai';
+  if(hasAI) initAI2(); else { ai2.alive=false; ai2.inv=999999; }
+  // P2 human player
+  const has2P=gameMode==='2player'||gameMode==='2player-ai';
+  p2Lane=0; p2X=lx(0); p2TX=lx(0); p2Inv=120; p2Alive=has2P; p2RespawnT=0;
   // Request iOS permission on first game start (needs user gesture)
   requestTilt();
   // Pre-populate road
@@ -416,9 +956,9 @@ function clearLevel(){
   const s=score>=lv.target*2?3:score>=lv.target*1.5?2:1;
   if(s>prog.stars[curLevel]) prog.stars[curLevel]=s;
   if(score>prog.bests[curLevel]) prog.bests[curLevel]=score;
-  if(curLevel>=prog.unlocked&&curLevel+1<LEVELS.length){
-    prog.unlocked=curLevel+1;
-  }
+  if(curLevel>=prog.unlocked&&curLevel+1<LEVELS.length) prog.unlocked=curLevel+1;
+  prog.gold+=(curLevel+1)*20+100;
+  prog.xp  +=(curLevel+1)*8 +50;
   saveProg();
 }
 
@@ -437,9 +977,27 @@ function update(){
   // Level clear check
   if(score>=lv.target){ clearLevel(); return; }
 
+  // Boss spawns on every 10th level (levels 10, 20, …) at score midpoint
+  if((curLevel+1)%10===0 && !bossSpawned && score>=Math.floor(lv.target*0.45)) spawnBoss();
+
+  const hasAI=gameMode==='with-ai'||gameMode==='2player-ai';
+  if(hasAI) updateAI2();
+  updateBoss();
+
   pX+=(pTX-pX)*0.22;
   if(pInv>0) pInv--;
   if(comboT>0) comboT--; else combo=0;
+
+  // P2 human update
+  const has2P=gameMode==='2player'||gameMode==='2player-ai';
+  if(has2P){
+    if(p2Alive){
+      p2X+=(p2TX-p2X)*0.22;
+      if(p2Inv>0) p2Inv--;
+    } else {
+      if(--p2RespawnT<=0){ p2Alive=true; p2Inv=120; p2TX=lx(p2Lane); }
+    }
+  }
 
   // Spawn enemies
   const si=Math.max(lv.sm, lv.sb - speed*4|0);
@@ -457,6 +1015,8 @@ function update(){
 
   // Exhaust
   if(frame%4===0){ exhaust(pX-9,pY+CH*0.5); exhaust(pX+9,pY+CH*0.5); }
+  if(frame%4===0&&hasAI&&ai2.alive){ exhaust(ai2.x-9,AI_Y()+CH*0.5); exhaust(ai2.x+9,AI_Y()+CH*0.5); }
+  if(frame%4===0&&has2P&&p2Alive){ exhaust(p2X-9,P2_Y()+CH*0.5); exhaust(p2X+9,P2_Y()+CH*0.5); }
 
   // Move enemies
   for(let i=enemies.length-1;i>=0;i--){
@@ -466,6 +1026,13 @@ function update(){
     if(pInv===0){
       const dx=Math.abs(e.x-pX),dy=Math.abs(e.y-pY);
       if(dx<(CW+e.w)*0.37&&dy<(CH+e.h)*0.37){die(); return;}
+    }
+    // P2 collision
+    if(has2P&&p2Alive&&p2Inv===0){
+      const dx=Math.abs(e.x-p2X),dy=Math.abs(e.y-P2_Y());
+      if(dx<(CW+e.w)*0.37&&dy<(CH+e.h)*0.37){
+        p2Alive=false; p2RespawnT=200; boom(p2X,P2_Y()); shake=Math.max(shake,12);
+      }
     }
   }
 
@@ -480,6 +1047,13 @@ function update(){
       score+=pts;
       sparkle(c.x,c.y,LEVELS[curLevel].ac);
       pop(`+${pts}`,c.x,c.y-22,LEVELS[curLevel].ac);
+      coins.splice(i,1); continue;
+    }
+    // P2 collects coins
+    if(has2P&&p2Alive&&Math.abs(c.x-p2X)<CW*0.72&&Math.abs(c.y-P2_Y())<CH*0.72){
+      const pts=50; score+=pts;
+      sparkle(c.x,c.y,'#70FF98');
+      pop(`+${pts}`,c.x,c.y-22,'#70FF98');
       coins.splice(i,1);
     }
   }
@@ -521,12 +1095,54 @@ function drawHUD(){
 
   // Level name & number (top-left)
   cx.fillStyle='rgba(0,0,0,0.35)';
-  rrect(roadL+8,50,120,34,6); cx.fill();
-  cx.fillStyle=ac; cx.font='bold 10px monospace';
+  rrect(roadL+8,50,128,34,6); cx.fill();
+  cx.fillStyle=lv.boss?'#FF4040':ac; cx.font='bold 10px monospace';
   cx.textAlign='left'; cx.textBaseline='top';
-  cx.fillText(`LVL ${curLevel+1}  ${lv.diff}`,roadL+14,56);
-  cx.fillStyle=dc; cx.font='bold 13px monospace';
-  cx.fillText(lv.name,roadL+14,68);
+  cx.fillText(`LV${curLevel+1}  ${lv.boss?'💀':''} ${lv.diff}`,roadL+14,56);
+  cx.fillStyle=dc; cx.font='bold 12px monospace';
+  const shortName=lv.name.length>12?lv.name.slice(0,11)+'…':lv.name;
+  cx.fillText(shortName,roadL+14,68);
+
+  // Player name (top-right)
+  if(playerName){
+    cx.fillStyle='rgba(0,0,0,0.35)';
+    rrect(roadR-130,50,122,34,6); cx.fill();
+    cx.fillStyle='#706040'; cx.font='bold 9px monospace';
+    cx.textAlign='right'; cx.textBaseline='top';
+    cx.fillText('DRIVER',roadR-14,56);
+    cx.fillStyle=dc; cx.font='bold 12px monospace';
+    cx.fillText(playerName.toUpperCase(),roadR-14,68);
+  }
+
+  // Bottom-left info panel — shows mode-relevant companion status
+  const hasAIhud=gameMode==='with-ai'||gameMode==='2player-ai';
+  const has2Phud=gameMode==='2player'||gameMode==='2player-ai';
+  if(hasAIhud){
+    cx.fillStyle='rgba(0,0,0,0.40)';
+    rrect(roadL+8,H-64,120,32,6); cx.fill();
+    cx.fillStyle='#50B8FF'; cx.font='bold 9px monospace';
+    cx.textAlign='left'; cx.textBaseline='top';
+    cx.fillText(ai2.alive?'🤖 CPU':'🤖 CPU ✕',roadL+14,H-60);
+    cx.fillStyle='#80D8FF'; cx.font='bold 12px monospace';
+    cx.fillText(`${ai2.score}`,roadL+14,H-48);
+  }
+  if(has2Phud){
+    const panelX=hasAIhud?roadL+136:roadL+8;
+    cx.fillStyle='rgba(0,0,0,0.40)';
+    rrect(panelX,H-64,120,32,6); cx.fill();
+    cx.fillStyle='#70FF98'; cx.font='bold 9px monospace';
+    cx.textAlign='left'; cx.textBaseline='top';
+    cx.fillText(p2Alive?'👥 P2':'👥 P2 ✕',panelX+6,H-60);
+    cx.fillStyle='#A0FFB8'; cx.font='bold 12px monospace';
+    cx.fillText(p2Alive?'A / D  keys':'respawning…',panelX+6,H-48);
+  }
+  // Mode badge (top center-right)
+  const modeLabel={solo:'SOLO','with-ai':'+ AI','2player':'2P','2player-ai':'2P+AI'}[gameMode];
+  cx.fillStyle='rgba(0,0,0,0.35)';
+  rrect(W/2+100,8,60,20,4); cx.fill();
+  cx.fillStyle='#504030'; cx.font='bold 9px monospace';
+  cx.textAlign='center'; cx.textBaseline='middle';
+  cx.fillText(modeLabel,W/2+130,18);
 
   // Speed bar
   const spFrac=(speed-lv.ss)/(lv.ms-lv.ss);
@@ -582,130 +1198,489 @@ function drawHUD(){
   }
 }
 
-// ── Title screen ──────────────────────────────────────────────────
-function drawTitle(){
-  cx.fillStyle='rgba(10,8,5,0.76)'; cx.fillRect(0,0,W,H);
-  cx.textAlign='center';
-  cx.fillStyle='#806830'; cx.font='bold 11px monospace';
-  cx.textBaseline='alphabetic';
-  cx.fillText('ENDLESS HIGHWAY',W/2,H*0.28);
-  cx.shadowColor='#F0D060'; cx.shadowBlur=26;
-  cx.fillStyle='#F0D060';
-  const fs=Math.min(66,W*0.14)|0;
-  cx.font=`bold ${fs}px monospace`;
-  cx.fillText('HIGHWAY',W/2,H*0.41);
-  cx.fillText('RUN',W/2,H*0.41+fs*1.12);
-  cx.shadowBlur=0;
-  cx.strokeStyle='#4A3C18'; cx.lineWidth=1;
-  const dw=Math.min(220,W*0.55);
-  cx.beginPath(); cx.moveTo(W/2-dw/2,H*0.56); cx.lineTo(W/2+dw/2,H*0.56); cx.stroke();
-  cx.fillStyle='#686040'; cx.font='11px monospace'; cx.textBaseline='middle';
-  cx.fillText('5 LEVELS  ·  KEYBOARD ← →  ·  MOBILE TAP',W/2,H*0.61);
-  if(Math.sin(Date.now()*0.0028)>0){
-    cx.fillStyle='#F0D060'; cx.font='bold 15px monospace';
-    cx.fillText('TAP  TO  START',W/2,H*0.70);
+// ── Title / Main Menu ─────────────────────────────────────────────
+let _menuBtnRects=[], _dailyRect=null, _settingsRect=null, _watchedThisSession=false;
+
+// Side-profile showcase car
+function _drawCarSide(x,y,w,h,bc,sc){
+  const hw=w/2, hh=h/2;
+  // ground shadow
+  cx.fillStyle='rgba(0,0,0,0.28)';
+  cx.beginPath(); cx.ellipse(x,y+hh*1.08,hw*0.88,hh*0.22,0,0,Math.PI*2); cx.fill();
+  // body
+  cx.fillStyle=bc;
+  cx.beginPath();
+  cx.moveTo(x-hw,     y+hh*0.42);
+  cx.lineTo(x-hw,     y+hh*0.68);
+  cx.quadraticCurveTo(x-hw*0.80, y+hh*1.02, x-hw*0.60, y+hh*0.88);
+  cx.lineTo(x-hw*0.36,y+hh*0.80);
+  cx.lineTo(x+hw*0.28,y+hh*0.80);
+  cx.quadraticCurveTo(x+hw*0.52, y+hh*1.02, x+hw*0.72, y+hh*0.88);
+  cx.lineTo(x+hw*0.96,y+hh*0.68);
+  cx.lineTo(x+hw,     y-hh*0.10);
+  cx.lineTo(x+hw*0.72,y-hh*0.72);
+  cx.lineTo(x+hw*0.28,y-hh*1.02);
+  cx.lineTo(x-hw*0.22,y-hh*1.02);
+  cx.lineTo(x-hw*0.66,y-hh*0.60);
+  cx.quadraticCurveTo(x-hw*0.88,y-hh*0.20,x-hw,y+hh*0.10);
+  cx.closePath(); cx.fill();
+  // roof / pillar darkening
+  cx.fillStyle='rgba(0,0,0,0.22)';
+  cx.beginPath();
+  cx.moveTo(x-hw*0.22,y-hh*1.02); cx.lineTo(x+hw*0.28,y-hh*1.02);
+  cx.lineTo(x+hw*0.28,y-hh*0.58); cx.lineTo(x-hw*0.22,y-hh*0.58);
+  cx.closePath(); cx.fill();
+  // front windshield
+  cx.fillStyle=sc; cx.globalAlpha=0.82;
+  cx.beginPath();
+  cx.moveTo(x+hw*0.74,y-hh*0.68); cx.lineTo(x+hw*0.52,y-hh*0.98);
+  cx.lineTo(x+hw*0.28,y-hh*1.02); cx.lineTo(x+hw*0.28,y-hh*0.58);
+  cx.closePath(); cx.fill();
+  // side window
+  cx.beginPath();
+  cx.moveTo(x-hw*0.20,y-hh*1.02); cx.lineTo(x+hw*0.24,y-hh*1.02);
+  cx.lineTo(x+hw*0.24,y-hh*0.58); cx.lineTo(x-hw*0.20,y-hh*0.58);
+  cx.closePath(); cx.fill();
+  // rear window
+  cx.beginPath();
+  cx.moveTo(x-hw*0.24,y-hh*1.02); cx.lineTo(x-hw*0.62,y-hh*0.62);
+  cx.lineTo(x-hw*0.40,y-hh*0.58); cx.lineTo(x-hw*0.24,y-hh*0.58);
+  cx.closePath(); cx.fill();
+  cx.globalAlpha=1;
+  // door line
+  cx.strokeStyle='rgba(0,0,0,0.30)'; cx.lineWidth=Math.max(1,hh*0.06);
+  cx.beginPath(); cx.moveTo(x-hw*0.08,y-hh*0.56); cx.lineTo(x-hw*0.08,y+hh*0.78); cx.stroke();
+  // wheels
+  for(const [wx,wy] of [[x-hw*0.48,y+hh*0.90],[x+hw*0.46,y+hh*0.90]]){
+    cx.fillStyle='#181818'; cx.beginPath(); cx.arc(wx,wy,hh*0.45,0,Math.PI*2); cx.fill();
+    cx.fillStyle='#555'; cx.beginPath(); cx.arc(wx,wy,hh*0.28,0,Math.PI*2); cx.fill();
+    for(let a=0;a<5;a++){
+      const ag=a*Math.PI*2/5;
+      cx.strokeStyle='#666'; cx.lineWidth=Math.max(1,hh*0.06);
+      cx.beginPath(); cx.moveTo(wx,wy);
+      cx.lineTo(wx+Math.cos(ag)*hh*0.26,wy+Math.sin(ag)*hh*0.26); cx.stroke();
+    }
+    cx.fillStyle='#333'; cx.beginPath(); cx.arc(wx,wy,hh*0.09,0,Math.PI*2); cx.fill();
   }
-  if(prog.unlocked>0){
-    cx.fillStyle='#4A3A18'; cx.font='11px monospace';
-    cx.fillText(`${prog.unlocked} LEVEL${prog.unlocked>1?'S':''} UNLOCKED`,W/2,H*0.78);
+  // headlight
+  cx.shadowColor='#FFFCE0'; cx.shadowBlur=8;
+  cx.fillStyle='#FFF8D0';
+  cx.beginPath(); cx.ellipse(x+hw*0.97,y+hh*0.05,hw*0.07,hh*0.14,0,0,Math.PI*2); cx.fill();
+  cx.shadowBlur=0;
+  // taillight
+  cx.fillStyle='#FF2020';
+  cx.beginPath(); cx.ellipse(x-hw*0.97,y+hh*0.05,hw*0.06,hh*0.14,0,0,Math.PI*2); cx.fill();
+}
+
+function handleTitleTap(tx,ty){
+  // daily reward
+  if(_dailyRect&&tx>=_dailyRect.x&&tx<=_dailyRect.x+_dailyRect.w&&ty>=_dailyRect.y&&ty<=_dailyRect.y+_dailyRect.h){
+    const today=new Date().toDateString();
+    if(prog.lastDaily!==today){
+      prog.gold+=500; prog.lastDaily=today; saveProg();
+      pop('🎁  +500  DAILY  REWARD',W/2,H*0.45,'#F0C020');
+    }
+    return;
+  }
+  for(const b of _menuBtnRects){
+    if(tx>=b.x&&tx<=b.x+b.w&&ty>=b.y&&ty<=b.y+b.h){
+      if(b.id==='watch'){
+        if(!_watchedThisSession){ _watchedThisSession=true; prog.gold+=500; saveProg(); pop('+500 💰  BONUS',W/2,H*0.55,'#F0C020'); }
+      } else if(b.id==='mode'){
+        ST='mode-select';
+      } else if(b.id==='levels'){
+        jumpToLevelPage(prog.unlocked); ST='levels';
+      }
+      return;
+    }
   }
 }
 
-// ── Level select ──────────────────────────────────────────────────
-function drawLevelSelect(){
-  cx.fillStyle='rgba(10,8,5,0.82)'; cx.fillRect(0,0,W,H);
-  cx.textAlign='center'; cx.textBaseline='middle';
+function drawTitle(){
+  _menuBtnRects=[];
+  const TOP=58, BOT=72;
+  const midH=H-TOP-BOT;
 
-  // Title
-  cx.fillStyle='#F0D060'; cx.font=`bold ${Math.min(28,W*0.065)|0}px monospace`;
-  cx.fillText('SELECT LEVEL',W/2,H*0.10);
+  // ── Background dim ────────────────────────────────────────────
+  cx.fillStyle='rgba(6,4,2,0.50)'; cx.fillRect(0,TOP,W,midH);
 
-  // Card layout: 3 top row, 2 bottom centered (or single column on very narrow)
-  const cardW=Math.min(Math.floor((W-60)/3)-12, 145);
-  const cardH=Math.round(cardW*0.68);
-  const gapX=Math.min(18,cardW*0.1);
+  // ── TOP BAR ──────────────────────────────────────────────────
+  cx.fillStyle='#14110A'; cx.fillRect(0,0,W,TOP);
+  cx.fillStyle='#C8A030'; cx.fillRect(0,TOP-2,W,2);
 
-  const rowW3=cardW*3+gapX*2;
-  const rowW2=cardW*2+gapX;
-  const row1X=(W-rowW3)/2, row1Y=H*0.20;
-  const row2X=(W-rowW2)/2, row2Y=row1Y+cardH+22;
+  // flag logo
+  cx.font=`${TOP*0.55|0}px serif`; cx.textBaseline='middle'; cx.textAlign='left';
+  cx.fillText('🏁',8,TOP/2);
 
-  const positions=[
-    {x:row1X,                 y:row1Y},
-    {x:row1X+cardW+gapX,      y:row1Y},
-    {x:row1X+(cardW+gapX)*2,  y:row1Y},
-    {x:row2X,                 y:row2Y},
-    {x:row2X+cardW+gapX,      y:row2Y},
-  ];
+  // EXP badge
+  const xpLevel=Math.max(1,Math.floor(prog.xp/1000)+1);
+  cx.fillStyle='rgba(0,0,0,0.50)'; rrect(38,7,44,TOP-14,6); cx.fill();
+  cx.strokeStyle='#C8A030'; cx.lineWidth=1; rrect(38,7,44,TOP-14,6); cx.stroke();
+  cx.fillStyle='#A08020'; cx.font='bold 8px monospace'; cx.textAlign='center'; cx.textBaseline='top';
+  cx.fillText('EXP',60,11);
+  cx.fillStyle='#F0D060'; cx.font=`bold ${TOP*0.35|0}px monospace`;
+  cx.textBaseline='bottom'; cx.fillText(String(xpLevel),60,TOP-8);
 
-  cardRects=[];
-  for(let li=0;li<LEVELS.length;li++){
-    const lv=LEVELS[li];
-    const {x,y}=positions[li];
-    const locked=li>prog.unlocked;
-    const done=prog.stars[li]>0;
-    cardRects.push({x,y,w:cardW,h:cardH,li});
+  // mini player avatar (small car icon)
+  cx.save(); cx.translate(100,TOP/2); cx.scale(0.28,0.28);
+  drawCar(0,0,CW,CH,{b:'#C81818',r:'#900E0E',w:'#A0D8EF'},true);
+  cx.restore();
 
-    // card bg
-    cx.fillStyle=locked?'rgba(20,16,12,0.85)':'rgba(30,26,18,0.92)';
-    rrect(x,y,cardW,cardH,8); cx.fill();
-
-    // border
-    cx.strokeStyle=locked?'#2A2420':done?lv.ac:'#4A3C20';
-    cx.lineWidth=locked?1:2;
-    rrect(x,y,cardW,cardH,8); cx.stroke();
-
-    // hover highlight if this is hovered (skip for now)
-
-    if(locked){
-      // Lock icon
-      cx.fillStyle='#302820'; cx.font=`bold ${cardH*0.35|0}px monospace`;
-      cx.fillText('🔒',x+cardW/2,y+cardH/2);
-      cx.fillStyle='#3A3020'; cx.font=`bold ${cardH*0.16|0}px monospace`;
-      cx.fillText(lv.name,x+cardW/2,y+cardH*0.82);
-    } else {
-      // Level number
-      cx.fillStyle=lv.ac; cx.font=`bold ${cardH*0.28|0}px monospace`;
-      cx.fillText(`0${li+1}`,x+cardW/2,y+cardH*0.28);
-
-      // Level name
-      const nameFs=Math.min(11,cardW*0.085)|0;
-      cx.fillStyle=lv.dc; cx.font=`bold ${nameFs}px monospace`;
-      cx.fillText(lv.name,x+cardW/2,y+cardH*0.50);
-
-      // Difficulty
-      cx.fillStyle='#706040'; cx.font=`${Math.max(8,nameFs-2)}px monospace`;
-      cx.fillText(lv.diff,x+cardW/2,y+cardH*0.64);
-
-      // Stars
-      const stars=prog.stars[li];
-      if(stars>0){
-        cx.fillStyle=lv.ac; cx.font=`${Math.max(9,cardH*0.14|0)}px monospace`;
-        cx.fillText('★'.repeat(stars)+'☆'.repeat(3-stars),x+cardW/2,y+cardH*0.84);
-      } else {
-        cx.fillStyle='#504030'; cx.font=`${Math.max(8,nameFs-1)}px monospace`;
-        cx.fillText(`TARGET ${lv.target}`,x+cardW/2,y+cardH*0.84);
-      }
-
-      // Best
-      if(prog.bests[li]>0){
-        cx.fillStyle='#5A4828'; cx.font=`${Math.max(7,nameFs-2)}px monospace`;
-        cx.fillText(`BEST ${prog.bests[li]}`,x+cardW/2,y+cardH*0.97);
-      }
-    }
+  // player name + XP bar
+  if(playerName){
+    cx.fillStyle='#F0D060'; cx.font=`bold ${Math.min(14,TOP*0.27)|0}px monospace`;
+    cx.textAlign='left'; cx.textBaseline='top';
+    cx.fillText(playerName.toUpperCase(),116,10);
+    const xpBW=Math.min(130,W*0.28), xpInLvl=prog.xp%1000;
+    cx.fillStyle='rgba(0,0,0,0.45)'; rrect(116,28,xpBW,8,3); cx.fill();
+    cx.fillStyle='#C8A030'; rrect(116,28,xpBW*xpInLvl/1000,8,3); cx.fill();
+    cx.fillStyle='#706030'; cx.font='8px monospace'; cx.textBaseline='top';
+    cx.fillText(`${xpInLvl}  /  1000`,116+xpBW+5,28);
+  } else {
+    cx.fillStyle='#806830'; cx.font='bold 10px monospace';
+    cx.textAlign='left'; cx.textBaseline='middle';
+    cx.fillText('HIGHWAY  RUN',116,TOP/2);
   }
 
-  // Back / ESC hint
-  const bw=80, bh=28, bx=roadL, by=H-50;
-  backRect={x:bx,y:by,w:bw,h:bh};
-  cx.fillStyle='rgba(0,0,0,0.4)'; rrect(bx,by,bw,bh,6); cx.fill();
-  cx.fillStyle='#504030'; cx.font='11px monospace';
-  cx.fillText('← BACK',bx+bw/2,by+bh/2);
+  // gold display
+  const goldStr=prog.gold.toLocaleString();
+  cx.fillStyle='rgba(0,0,0,0.45)'; rrect(W-148,10,136,TOP-20,6); cx.fill();
+  cx.font=`${TOP*0.22|0}px serif`; cx.textAlign='right'; cx.textBaseline='middle';
+  cx.fillText('💰',W-18,TOP/2);
+  cx.fillStyle='#F0D060'; cx.font=`bold ${Math.min(18,TOP*0.33)|0}px monospace`;
+  cx.textAlign='right'; cx.fillText(goldStr,W-36,TOP/2+1);
 
-  // Controls note
-  cx.fillStyle='#3A3020'; cx.font='10px monospace';
+  // settings icon
+  _settingsRect={x:W-148,y:10,w:22,h:TOP-20};
+  cx.fillStyle='#606060'; cx.font=`${TOP*0.4|0}px serif`;
+  cx.textAlign='center'; cx.textBaseline='middle';
+  cx.fillText('⚙',W-137,TOP/2);
+
+  // ── PROGRESS CARD (top-left of main area) ────────────────────
+  const cw=Math.min(W*0.27,110), ch=cw*0.80;
+  const cx2=14, cy2=TOP+12;
+  cx.fillStyle='rgba(0,0,0,0.76)'; rrect(cx2,cy2,cw,ch,8); cx.fill();
+  cx.strokeStyle='#4A3C18'; cx.lineWidth=1; rrect(cx2,cy2,cw,ch,8); cx.stroke();
+  const cleared=prog.stars.filter(s=>s>0).length;
+  cx.fillStyle='#C8A030'; cx.font='bold 9px monospace'; cx.textAlign='center'; cx.textBaseline='middle';
+  cx.fillText('PROGRESS',cx2+cw/2,cy2+ch*0.22);
+  cx.fillStyle='#F0D060'; cx.font=`bold ${Math.min(20,cw*0.22)|0}px monospace`;
+  cx.fillText(`${cleared} / 100`,cx2+cw/2,cy2+ch*0.54);
+  cx.fillStyle='#504030'; cx.font='8px monospace';
+  cx.fillText('LEVELS  CLEARED',cx2+cw/2,cy2+ch*0.82);
+
+  // ── SHOWCASE CAR (center of main area) ───────────────────────
+  const carShowW=Math.min(W*0.76, 360);
+  const carShowH=carShowW*0.44;
+  cx.save();
+  cx.shadowColor='rgba(200,30,30,0.40)'; cx.shadowBlur=28;
+  _drawCarSide(W/2, TOP+midH*0.60, carShowW, carShowH, '#C81818','rgba(160,220,240,0.90)');
+  cx.shadowBlur=0;
+  cx.restore();
+
+  // game title under car
+  cx.fillStyle='rgba(200,160,48,0.80)'; cx.font=`bold ${Math.min(13,W*0.030)|0}px monospace`;
+  cx.textAlign='center'; cx.textBaseline='top';
+  cx.fillText('HIGHWAY  RUN',W/2,TOP+midH*0.88);
+
+  // ── DAILY REWARD (right side) ────────────────────────────────
+  const today=new Date().toDateString();
+  const canClaim=prog.lastDaily!==today;
+  const gx=W-46, gy=TOP+midH*0.38;
+  _dailyRect={x:gx-36,y:gy-30,w:72,h:66};
+  if(canClaim){
+    cx.font=`${Math.min(38,W*0.09)|0}px serif`; cx.textAlign='center'; cx.textBaseline='middle';
+    if(Math.sin(Date.now()*0.005)>0.1){
+      cx.shadowColor='#FF6040'; cx.shadowBlur=14;
+      cx.fillText('🎁',gx,gy);
+      cx.shadowBlur=0;
+    } else {
+      cx.fillText('🎁',gx,gy);
+    }
+    cx.fillStyle='#F0D060'; cx.font='bold 9px monospace'; cx.textBaseline='top';
+    cx.fillText('DAILY',gx,gy+22);
+    cx.fillText('REWARD',gx,gy+33);
+  } else {
+    cx.font='28px serif'; cx.textAlign='center'; cx.textBaseline='middle';
+    cx.globalAlpha=0.35; cx.fillText('🎁',gx,gy); cx.globalAlpha=1;
+    cx.fillStyle='#403820'; cx.font='bold 8px monospace'; cx.textBaseline='top';
+    cx.fillText('CLAIMED',gx,gy+18);
+  }
+
+  // ── BOTTOM BAR ───────────────────────────────────────────────
+  const botY=H-BOT;
+  cx.fillStyle='#14110A'; cx.fillRect(0,botY,W,BOT);
+  cx.fillStyle='#2A2010'; cx.fillRect(0,botY,W,2);
+  const bw=W/3;
+
+  // dividers
+  cx.strokeStyle='#2A2010'; cx.lineWidth=1;
+  for(const dx of [bw,bw*2]){
+    cx.beginPath(); cx.moveTo(dx,botY+8); cx.lineTo(dx,H-8); cx.stroke();
+  }
+
+  const btnDefs=[
+    {id:'watch', icon:'🎬', label:'WATCH', sub:'+500 💰', col:'#A09060'},
+    {id:'mode',  icon:'🏎', label:'GAME  MODE', sub:'',    col:'#F0D060'},
+    {id:'levels',icon:'⚙️', label:'LEVELS',    sub:'',    col:'#40C870'},
+  ];
+  btnDefs.forEach((b,i)=>{
+    const bx=bw*i;
+    _menuBtnRects.push({x:bx,y:botY,w:bw,h:BOT,id:b.id});
+    // hover glow for GAME MODE
+    if(b.id==='mode'&&Math.sin(Date.now()*0.003)>0){
+      cx.fillStyle='rgba(200,160,48,0.07)'; cx.fillRect(bx,botY,bw,BOT);
+    }
+    cx.font=`${BOT*0.40|0}px serif`; cx.textAlign='center'; cx.textBaseline='middle';
+    cx.fillText(b.icon,bx+bw/2,botY+BOT*0.36);
+    if(b.sub){
+      cx.fillStyle='#E8A020'; cx.font=`bold ${BOT*0.19|0}px monospace`;
+      cx.textBaseline='middle'; cx.fillText(b.sub,bx+bw/2,botY+BOT*0.36+BOT*0.18);
+    }
+    cx.fillStyle=b.col; cx.font=`bold ${Math.min(12,bw*0.095)|0}px monospace`;
+    cx.textBaseline='alphabetic'; cx.fillText(b.label,bx+bw/2,H-10);
+  });
+}
+
+// ── Draw a location-pin shape ─────────────────────────────────────
+function _drawMapPin(px,py,state,num,selected){
+  const R=selected?16:12;
+  // colours by state
+  let fillC,strokeC,textC;
+  if(state==='locked')        { fillC='#2A0808'; strokeC='#6A1010'; textC='#5A2020'; }
+  else if(state==='done')     { fillC='#083010'; strokeC='#20A040'; textC='#30D060'; }
+  else if(state==='current')  { fillC='#2A1E00'; strokeC='#C8A030'; textC='#F0D060'; }
+  else                        { fillC='#181410'; strokeC='#3A3020'; textC='#4A4030'; }
+
+  if(state==='current'&&selected){
+    cx.shadowColor='#C8A030'; cx.shadowBlur=14;
+  }
+
+  // teardrop: circle + triangle point below
+  cx.beginPath();
+  cx.arc(px,py-R,R,Math.PI,0);
+  cx.lineTo(px+R*0.6,py-R*0.2);
+  cx.quadraticCurveTo(px,py+R*0.9,px-R*0.6,py-R*0.2);
+  cx.closePath();
+  cx.fillStyle=fillC; cx.fill();
+  cx.strokeStyle=strokeC; cx.lineWidth=selected?2:1.5; cx.stroke();
+  cx.shadowBlur=0;
+
+  if(selected){
+    // outer pulse ring
+    cx.beginPath(); cx.arc(px,py-R,R+5,0,Math.PI*2);
+    cx.strokeStyle=strokeC+'60'; cx.lineWidth=2; cx.stroke();
+  }
+
+  // number or icon inside the pin
+  cx.textAlign='center'; cx.textBaseline='middle';
+  if(state==='locked'){
+    cx.font=`${R*0.9|0}px serif`; cx.fillStyle=textC;
+    cx.fillText('🔒',px,py-R);
+  } else if(state==='done'){
+    cx.font=`bold ${R*0.82|0}px monospace`; cx.fillStyle=textC;
+    cx.fillText('✓',px,py-R);
+  } else {
+    cx.font=`bold ${R*0.78|0}px monospace`; cx.fillStyle=textC;
+    cx.fillText(String(num),px,py-R-1);
+  }
+}
+
+// ── Level select (island map) ─────────────────────────────────────
+let _prevRect=null, _nextRect=null;
+function drawLevelSelect(){
+  const topBarH=42, botBarH=60;
+  const mapY=topBarH, mapH=H-topBarH-botBarH;
+  const tierName=['BEGINNER','AMATEUR','DRIVER','RACER','PRO','EXPERT','MASTER','ELITE','LEGEND','CHAMPION'][levelPage];
+  const tierAC=_TIER_COLS[levelPage].ac;
+  const pageFirst=levelPage*10;
+
+  // ── Ocean background ──────────────────────────────────────────────
+  const oceanG=cx.createLinearGradient(0,mapY,0,mapY+mapH);
+  oceanG.addColorStop(0,'#08101C'); oceanG.addColorStop(1,'#0C1828');
+  cx.fillStyle=oceanG; cx.fillRect(0,mapY,W,mapH);
+
+  // subtle wave lines
+  cx.strokeStyle='rgba(20,60,100,0.35)'; cx.lineWidth=1;
+  for(let row=0;row<6;row++){
+    const wy=mapY+mapH*(0.12+row*0.14);
+    cx.beginPath();
+    for(let xw=0;xw<=W;xw+=40){
+      const ya=wy+Math.sin(xw*0.06+row)*3;
+      xw===0?cx.moveTo(xw,ya):cx.lineTo(xw,ya);
+    }
+    cx.stroke();
+  }
+
+  // ── Island ────────────────────────────────────────────────────────
+  const iX=W*0.04, iY=mapY+mapH*0.04, iW=W*0.92, iH=mapH*0.88;
+  // compute island polygon
+  const pts=_ISLAND_PTS.map(([fx,fy])=>[iX+iW*fx, iY+iH*fy]);
+  // fill with green gradient
+  const grassG=cx.createLinearGradient(iX,iY,iX,iY+iH);
+  grassG.addColorStop(0,'#1A4010'); grassG.addColorStop(1,'#0E2A08');
+  cx.beginPath();
+  cx.moveTo(pts[0][0],pts[0][1]);
+  for(let i=1;i<pts.length;i++) cx.lineTo(pts[i][0],pts[i][1]);
+  cx.closePath();
+  cx.fillStyle=grassG; cx.fill();
+  // brown earth edge stroke
+  cx.strokeStyle='#5C3A18'; cx.lineWidth=6;
+  cx.beginPath();
+  cx.moveTo(pts[0][0],pts[0][1]);
+  for(let i=1;i<pts.length;i++) cx.lineTo(pts[i][0],pts[i][1]);
+  cx.closePath(); cx.stroke();
+  // inner highlight
+  cx.strokeStyle='rgba(60,180,40,0.15)'; cx.lineWidth=2;
+  cx.beginPath();
+  cx.moveTo(pts[0][0],pts[0][1]);
+  for(let i=1;i<pts.length;i++) cx.lineTo(pts[i][0],pts[i][1]);
+  cx.closePath(); cx.stroke();
+
+  // ── Trees ─────────────────────────────────────────────────────────
+  _MAP_TREES.forEach(([fx,fy])=>{
+    const tx=iX+iW*fx, ty=iY+iH*fy;
+    cx.fillStyle='#183A0C'; cx.beginPath(); cx.arc(tx,ty,4,0,Math.PI*2); cx.fill();
+    cx.fillStyle='#204A10'; cx.beginPath(); cx.arc(tx,ty,2.5,0,Math.PI*2); cx.fill();
+  });
+
+  // ── Road connecting pins ──────────────────────────────────────────
+  const pinPx=_MAP_PINS.map(([fx,fy])=>[iX+iW*fx, iY+iH*fy]);
+  cx.strokeStyle='#3A3020'; cx.lineWidth=7; cx.lineCap='round'; cx.lineJoin='round';
+  cx.beginPath(); cx.moveTo(pinPx[0][0],pinPx[0][1]);
+  for(let i=1;i<pinPx.length;i++) cx.lineTo(pinPx[i][0],pinPx[i][1]);
+  cx.stroke();
+  cx.strokeStyle='#4A3E28'; cx.lineWidth=4;
+  cx.beginPath(); cx.moveTo(pinPx[0][0],pinPx[0][1]);
+  for(let i=1;i<pinPx.length;i++) cx.lineTo(pinPx[i][0],pinPx[i][1]);
+  cx.stroke();
+  // center dashes
+  cx.strokeStyle='rgba(200,160,40,0.25)'; cx.lineWidth=1.5; cx.setLineDash([6,8]);
+  cx.beginPath(); cx.moveTo(pinPx[0][0],pinPx[0][1]);
+  for(let i=1;i<pinPx.length;i++) cx.lineTo(pinPx[i][0],pinPx[i][1]);
+  cx.stroke(); cx.setLineDash([]);
+
+  // ── Level pins ────────────────────────────────────────────────────
+  _pinRects=[];
+  for(let s=0;s<10;s++){
+    const li=pageFirst+s;
+    if(li>=LEVELS.length) break;
+    const [px,py]=pinPx[s];
+    const locked=li>prog.unlocked;
+    const done=prog.stars[li]>0||prog.bests[li]>0;
+    const state=locked?'locked':(done?'done':'current');
+    const sel=selectedMapPin===li;
+    _drawMapPin(px,py,state,li+1,sel);
+    // boss star indicator
+    if(LEVELS[li].boss&&!locked){
+      cx.fillStyle='#FF4040'; cx.font='9px serif';
+      cx.textAlign='center'; cx.textBaseline='alphabetic';
+      cx.fillText('💀',px+14,py-22);
+    }
+    // hit area (circle ~20r)
+    const hr=20;
+    _pinRects.push({x:px-hr,y:py-hr*2,w:hr*2,h:hr*2,li});
+  }
+
+  // ── Selected pin popup ────────────────────────────────────────────
+  _playRect=null;
+  if(selectedMapPin>=0&&selectedMapPin<pageFirst+10&&selectedMapPin>=pageFirst){
+    const li=selectedMapPin;
+    const lv=LEVELS[li];
+    const [ppx,ppy]=pinPx[li-pageFirst];
+    // card position: try right of pin, clamp to screen
+    const cw=Math.min(160,W*0.42), ch=110;
+    let cpx=ppx+18; if(cpx+cw>W-8) cpx=ppx-cw-18;
+    let cpy=ppy-ch/2-16; if(cpy<mapY+4) cpy=mapY+4; if(cpy+ch>mapY+mapH-4) cpy=mapY+mapH-ch-4;
+
+    cx.fillStyle='rgba(10,8,4,0.90)'; rrect(cpx,cpy,cw,ch,10); cx.fill();
+    cx.strokeStyle=lv.boss?'#FF4040':lv.ac; cx.lineWidth=1.5;
+    rrect(cpx,cpy,cw,ch,10); cx.stroke();
+
+    // title line
+    cx.fillStyle=lv.boss?'#FF6040':lv.ac;
+    cx.font=`bold ${Math.min(11,cw*0.07)|0}px monospace`;
+    cx.textAlign='center'; cx.textBaseline='top';
+    const popTitle=lv.boss?`💀 BOSS LV${li+1}`:`LV${li+1} · ${lv.name.length>10?lv.name.slice(0,9)+'…':lv.name}`;
+    cx.fillText(popTitle,cpx+cw/2,cpy+8);
+
+    cx.fillStyle='#C8A8A8'; cx.font=`${Math.min(9,cw*0.058)|0}px monospace`;
+    cx.textBaseline='top';
+    cx.fillText('REACH TARGET IN TIME',cpx+cw/2,cpy+25);
+
+    const reward=(li+1)*20+100;
+    cx.fillStyle='#C8A030'; cx.font=`bold ${Math.min(10,cw*0.065)|0}px monospace`;
+    cx.fillText(`💰 CASH REWARD: ${reward}`,cpx+cw/2,cpy+39);
+
+    const best=prog.bests[li];
+    cx.fillStyle='#888'; cx.font=`${Math.min(9,cw*0.058)|0}px monospace`;
+    cx.fillText(`HighScore: ${best>0?best:'---'}`,cpx+cw/2,cpy+54);
+
+    // diff + target line
+    cx.fillStyle='#605040';
+    cx.fillText(`${lv.diff}  ·  TARGET ${lv.target}`,cpx+cw/2,cpy+68);
+
+    // PLAY button inside popup
+    const pbW=cw*0.62, pbH=26, pbX=cpx+(cw-pbW)/2, pbY=cpy+ch-pbH-8;
+    cx.fillStyle=lv.ac+'CC'; rrect(pbX,pbY,pbW,pbH,8); cx.fill();
+    cx.strokeStyle=lv.ac; cx.lineWidth=1; rrect(pbX,pbY,pbW,pbH,8); cx.stroke();
+    cx.fillStyle='#000'; cx.font=`bold ${Math.min(11,pbW*0.14)|0}px monospace`;
+    cx.textBaseline='middle';
+    cx.fillText('▶  GO!',pbX+pbW/2,pbY+pbH/2);
+    _playRect={x:pbX,y:pbY,w:pbW,h:pbH};
+  }
+
+  // ── Top bar ───────────────────────────────────────────────────────
+  cx.fillStyle='rgba(0,0,0,0.80)'; cx.fillRect(0,0,W,topBarH);
+  cx.strokeStyle='rgba(255,255,255,0.06)'; cx.lineWidth=1;
+  cx.beginPath(); cx.moveTo(0,topBarH); cx.lineTo(W,topBarH); cx.stroke();
+  // chapter name
+  cx.fillStyle=tierAC; cx.font=`bold ${Math.min(14,W*0.034)|0}px monospace`;
+  cx.textAlign='center'; cx.textBaseline='middle';
+  cx.fillText(`CH.${levelPage+1}  ${tierName}  ·  LV ${pageFirst+1}–${pageFirst+10}`,W/2,topBarH/2);
+
+  // ── Bottom bar ────────────────────────────────────────────────────
+  const barY=H-botBarH;
+  cx.fillStyle='rgba(0,0,0,0.85)'; cx.fillRect(0,barY,W,botBarH);
+  cx.strokeStyle='rgba(255,255,255,0.07)'; cx.lineWidth=1;
+  cx.beginPath(); cx.moveTo(0,barY); cx.lineTo(W,barY); cx.stroke();
+
+  // BACK button
+  const bbW=64, bbH=36, bbX=10, bbY=barY+(botBarH-bbH)/2;
+  backRect={x:bbX,y:bbY,w:bbW,h:bbH};
+  cx.fillStyle='rgba(255,255,255,0.07)'; rrect(bbX,bbY,bbW,bbH,8); cx.fill();
+  cx.fillStyle='#888'; cx.font='bold 11px monospace';
+  cx.textAlign='center'; cx.textBaseline='middle';
+  cx.fillText('◀◀ BACK',bbX+bbW/2,bbY+bbH/2);
+
+  // NEXT button
+  const nbW=64, nbH=36, nbX=W-10-nbW, nbY=barY+(botBarH-nbH)/2;
+  _nextRect=levelPage<9?{x:nbX,y:nbY,w:nbW,h:nbH}:null;
+  _prevRect=null;
+  if(_nextRect){
+    cx.fillStyle='rgba(200,160,40,0.15)'; rrect(nbX,nbY,nbW,nbH,8); cx.fill();
+    cx.strokeStyle='#C8A030'; cx.lineWidth=1; rrect(nbX,nbY,nbW,nbH,8); cx.stroke();
+    cx.fillStyle='#F0D060'; cx.font='bold 11px monospace';
+    cx.textAlign='center'; cx.textBaseline='middle';
+    cx.fillText('NEXT ▶▶',nbX+nbW/2,nbY+nbH/2);
+  }
+
+  // center info
+  const mLabel={solo:'SOLO','with-ai':'WITH AI','2player':'2P','2player-ai':'2P+AI'}[gameMode];
+  cx.fillStyle=tierAC; cx.font=`bold ${Math.min(10,W*0.026)|0}px monospace`;
+  cx.textAlign='center'; cx.textBaseline='alphabetic';
+  cx.fillText(`CHALLENGE NO: ${selectedMapPin>=0?selectedMapPin+1:'—'}  ·  ${mLabel}`,W/2,barY+22);
+  cx.fillStyle='rgba(255,255,255,0.25)'; cx.font=`${Math.min(9,W*0.023)|0}px monospace`;
   cx.textBaseline='alphabetic';
-  cx.fillText('KEYBOARD  ← →  TO DODGE   ·   ESC  TO PAUSE',W/2,H-14);
+  cx.fillText('↑ ONE WAY  ·  ☀ DAY  ·  TAP PIN TO SELECT',W/2,barY+38);
+
+  // page dots at bottom bar
+  for(let p=0;p<10;p++){
+    const dot_x=W/2+(p-4.5)*12;
+    const dot_y=barY+botBarH-8;
+    cx.beginPath(); cx.arc(dot_x,dot_y,p===levelPage?4:2.5,0,Math.PI*2);
+    cx.fillStyle=p===levelPage?tierAC:'#2A2010'; cx.fill();
+  }
 }
 
 // ── Level clear ───────────────────────────────────────────────────
@@ -784,6 +1759,12 @@ function drawDead(){
   }
   cx.fillStyle='#3A2E18'; cx.font='10px monospace';
   cx.fillText('(or tap level select from menu)',W/2,H*0.80);
+  cx.fillStyle='#1C3A50'; cx.font='10px monospace';
+  cx.fillText(`CPU scored  ${ai2.score}`,W/2,H*0.87);
+  if(playerName){
+    cx.fillStyle='#4A3818'; cx.font='10px monospace';
+    cx.fillText(`keep going, ${playerName}!`,W/2,H*0.93);
+  }
 }
 
 // ── Render ────────────────────────────────────────────────────────
@@ -793,8 +1774,9 @@ function render(){
 
   drawRoad();
 
-  if(ST==='title'){   drawTitle();       cx.restore(); return; }
-  if(ST==='levels'){  drawLevelSelect(); cx.restore(); return; }
+  if(ST==='title'){        drawTitle();       cx.restore(); return; }
+  if(ST==='mode-select'){  drawModeSelect();  cx.restore(); return; }
+  if(ST==='levels'){       drawLevelSelect(); cx.restore(); return; }
 
   // Beam
   if(ST==='playing') drawBeam(pX,pY);
@@ -803,8 +1785,57 @@ function render(){
   enemies.forEach(e=>drawCar(e.x,e.y,e.w,e.h,e.col,false));
 
   if(ST==='playing'){
+    // Boss (drawn behind player cars)
+    drawBoss();
+
+    // AI player car
+    const hasAIr=gameMode==='with-ai'||gameMode==='2player-ai';
+    if(hasAIr&&ai2.alive){
+      const showAI=ai2.inv===0||(ai2.inv/4|0)%2===0;
+      if(showAI){
+        cx.save(); cx.shadowColor='#50B8FF'; cx.shadowBlur=10;
+        drawCar(ai2.x,AI_Y(),CW,CH,AI_COL,false);
+        cx.shadowBlur=0;
+        cx.fillStyle='#50B8FF'; cx.font='bold 9px monospace';
+        cx.textAlign='center'; cx.textBaseline='alphabetic';
+        cx.fillText('CPU',ai2.x,AI_Y()-CH/2-6);
+        cx.restore();
+      }
+    }
+
+    // P2 human car
+    const has2Pr=gameMode==='2player'||gameMode==='2player-ai';
+    if(has2Pr&&p2Alive){
+      const showP2=p2Inv===0||(p2Inv/4|0)%2===0;
+      if(showP2){
+        cx.save(); cx.shadowColor='#70FF98'; cx.shadowBlur=8;
+        drawCar(p2X,P2_Y(),CW,CH,P2_COL,false);
+        cx.shadowBlur=0;
+        cx.fillStyle='#70FF98'; cx.font='bold 9px monospace';
+        cx.textAlign='center'; cx.textBaseline='alphabetic';
+        cx.fillText('P2',p2X,P2_Y()-CH/2-6);
+        cx.restore();
+      }
+    }
+
+    // Human P1 car
     const show=pInv===0||(pInv/4|0)%2===0;
     if(show) drawCar(pX,pY,CW,CH,{b:'#C81818',r:'#900E0E',w:'#A0D8EF'},true);
+
+    // 2-player touch zone hints (first 4 seconds)
+    if(has2Pr&&frame<240&&!tiltEnabled){
+      const a=Math.max(0,(240-frame)/120)*0.45;
+      cx.globalAlpha=a;
+      cx.fillStyle='rgba(255,210,100,0.7)'; cx.font='bold 11px monospace';
+      cx.textAlign='center'; cx.textBaseline='middle';
+      cx.fillText('◀P1',W*0.125,H*0.52); cx.fillText('P1▶',W*0.375,H*0.52);
+      cx.fillStyle='rgba(112,255,152,0.7)';
+      cx.fillText('◀P2',W*0.625,H*0.52); cx.fillText('P2▶',W*0.875,H*0.52);
+      // divider
+      cx.strokeStyle='rgba(255,255,255,0.15)'; cx.lineWidth=1; cx.setLineDash([6,6]);
+      cx.beginPath(); cx.moveTo(W/2,H*0.4); cx.lineTo(W/2,H*0.65); cx.stroke();
+      cx.setLineDash([]); cx.globalAlpha=1;
+    }
   }
 
   parts.forEach(p=>{
